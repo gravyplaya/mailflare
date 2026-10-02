@@ -229,6 +229,7 @@ export const updateShortcutsSettingsSchema = z.object({
 
 export const updateSpamSettingsSchema = z.object({
 	enabled: z.boolean(),
+	aiEnabled: z.boolean(),
 });
 
 export const updateRecipientAddressSettingsSchema = z.object({
