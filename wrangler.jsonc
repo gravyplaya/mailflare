@@ -79,6 +79,9 @@
 			"bucket_name": "mailflare-raw","preview_bucket_name": "mailflare-raw",
 		},
 	],
+  "vars": {
+	"GITHUB_UPDATE_REPO": "https://github.com/gravyplaya/mailflare"
+  },
 	"queues": {
 		"producers": [
 			{
