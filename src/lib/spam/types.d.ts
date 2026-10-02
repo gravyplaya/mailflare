@@ -17,6 +17,7 @@ export type SpamAnalysisInput = {
 	headers?: Record<string, string>;
 	message: ParsedEmail;
 	intelligenceProvider?: SpamIntelligenceProvider;
+	aiClassifier?: SpamAiClassifier | null;
 };
 
 export type SpamAnalysisResult = {
@@ -37,6 +38,17 @@ export type PreparedSpamContent = {
 export interface SpamIntelligenceProvider {
 	check(input: { senderDomain: string; urlDomains: string[]; fingerprint: string }): Promise<SpamSignal[]>;
 }
+
+export type SpamAiChoice = "spam" | "suspicious" | "legitimate";
+
+export type SpamAiClassification = {
+	choice: SpamAiChoice;
+	probability: number;
+};
+
+export type SpamAiClassifier = {
+	classify(input: { sender: string; subject: string; body: string; urlDomains: string[] }): Promise<SpamAiClassification | null>;
+};
 
 export type BayesianResult = {
 	probability: number;

@@ -17,6 +17,7 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
 import { analyzeSpam } from "@/lib/spam/engine";
+import { createJevSpamClassifier } from "@/lib/spam/analyzers/ai";
 import { getReputationKeys } from "@/lib/spam/analyzers/reputation";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import {
@@ -101,7 +102,7 @@ export async function processInboundMessage(
 	});
 	let spamAnalysis: Awaited<ReturnType<typeof analyzeSpam>> | null = null;
 	let spamAnalysisError: string | null = null;
-	const [owner] = await db.select({ enabled: users.spamProtectionEnabled }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
+	const [owner] = await db.select({ enabled: users.spamProtectionEnabled, aiEnabled: users.aiSpamProtectionEnabled }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
 	if (owner?.enabled !== false) {
 		try {
 			spamAnalysis = await analyzeSpam(db, {
@@ -110,6 +111,7 @@ export async function processInboundMessage(
 				envelopeFrom: payload.from,
 				headers: payload.headers,
 				message: parsed,
+				aiClassifier: owner?.aiEnabled === false ? null : createJevSpamClassifier(env.AI),
 			});
 		} catch (error) {
 			spamAnalysisError = error instanceof Error ? error.message.slice(0, 300) : "Spam analysis failed";

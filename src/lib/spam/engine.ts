@@ -3,6 +3,7 @@ import type { AppDatabase } from "@/db";
 import { contacts, spamReputation } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
 import { analyzeAuthentication } from "./analyzers/authentication";
+import { aiClassificationSignal, classifyWithJev } from "./analyzers/ai";
 import { getReputationKeys } from "./analyzers/reputation";
 import { analyzeStructure } from "./analyzers/structure";
 import { analyzeUrls } from "./analyzers/urls";
@@ -34,6 +35,22 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 	}
 	if (contact?.source === "manual") signals.push({ id: "manual_contact", score: SPAM_WEIGHTS.relationships.manuallySavedContact, reason: "Sender is in your manually saved contacts" });
 	if (contact?.source === "outbound") signals.push({ id: "previously_sent", score: SPAM_WEIGHTS.relationships.previouslySentTo, reason: "You have previously sent email to this address" });
+
+	if (input.aiClassifier) {
+		const classification = await classifyWithJev(input.aiClassifier, {
+			sender,
+			subject: input.message.subject ?? "",
+			body: prepared.visibleText,
+			urlDomains: prepared.urlDomains,
+		});
+		if (classification) {
+			const cap = contact?.source === "manual" || contact?.source === "outbound"
+				? SPAM_WEIGHTS.ai.relationshipCap
+				: Number.POSITIVE_INFINITY;
+			const aiSignal = aiClassificationSignal(classification, cap);
+			if (aiSignal) signals.push(aiSignal);
+		}
+	}
 
 	const identities = getReputationKeys(input.message, fingerprint);
 	const reputationRecords = await Promise.all(identities.map(async (identity) => {

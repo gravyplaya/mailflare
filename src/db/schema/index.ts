@@ -23,6 +23,7 @@ export const users = sqliteTable("users", {
 	canManageUsers: integer("can_manage_users", { mode: "boolean" }).notNull().default(false),
 	keyboardShortcutsEnabled: integer("keyboard_shortcuts_enabled", { mode: "boolean" }).notNull().default(true),
 	spamProtectionEnabled: integer("spam_protection_enabled", { mode: "boolean" }).notNull().default(true),
+	aiSpamProtectionEnabled: integer("ai_spam_protection_enabled", { mode: "boolean" }).notNull().default(true),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
 	showFullRecipientAddresses: integer("show_full_recipient_addresses", { mode: "boolean" }).notNull().default(false),
 	// TOTP second factor. The secret is written at enrolment and only counts
