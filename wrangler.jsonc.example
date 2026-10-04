@@ -95,4 +95,73 @@
 			},
 		],
 	},
+	// Worker Previews (non-production branch builds): previews do not inherit
+	// top-level bindings, so each binding is re-declared here against
+	// preview-safe resources. Queue consumers, cron triggers, and routes must
+	// stay top level only. Create dedicated preview resources for your account
+	// (`wrangler d1 create`, `wrangler r2 bucket create`, `wrangler queues create`),
+	// then fill in their names/ids below. The preview D1 database is migrated
+	// automatically during first-run setup.
+	// See https://developers.cloudflare.com/workers/previews/configuration/
+	"previews": {
+		"d1_databases": [
+			{
+				"binding": "DB",
+				"database_name": "mailflare-preview",
+				"database_id": "<PREVIEW_DATABASE_ID>",
+			},
+		],
+		"r2_buckets": [
+			{
+				"binding": "BUCKET",
+				"bucket_name": "mailflare-raw-preview",
+			},
+		],
+		"send_email": [
+			{
+				"name": "EMAIL",
+			},
+		],
+		"ai": { "binding": "AI" },
+		"images": { "binding": "IMAGES" },
+		"durable_objects": {
+			"bindings": [
+				{
+					"name": "REALTIME",
+					"class_name": "RealtimeHub",
+				},
+			],
+		},
+		"queues": {
+			"producers": [
+				{
+					"binding": "INBOUND_QUEUE",
+					"queue": "mailflare-inbound-preview",
+				},
+				{
+					"binding": "OUTBOUND_QUEUE",
+					"queue": "mailflare-outbound-preview",
+				},
+				{
+					"binding": "AGENT_QUEUE",
+					"queue": "mailflare-agent-preview",
+				},
+			],
+		},
+		"ratelimits": [
+			{
+				"name": "LOGIN_RATE_LIMIT",
+				"namespace_id": "2001",
+				"simple": {
+					"limit": 20,
+					"period": 60,
+				},
+			},
+			{
+				"name": "AGENT_RATE_LIMIT",
+				"namespace_id": "2002",
+				"simple": { "limit": 120, "period": 60 },
+			},
+		],
+	},
 }
