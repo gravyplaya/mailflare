@@ -11,6 +11,12 @@ export type RichTextEditorProps = {
 	toolbarStart?: React.ReactNode;
 	toolbarEnd?: React.ReactNode;
 	footerContent?: React.ReactNode;
+	/**
+	 * Embed an image picked by paste, drop, or the toolbar. Returns one entry
+	 * per file with the src to display in the body, or null when that file was
+	 * rejected.
+	 */
+	onEmbedImages?: (files: File[]) => Promise<Array<{ src: string; alt?: string } | null>>;
 };
 
 export type ToolbarCommand = {
