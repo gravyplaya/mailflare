@@ -1,11 +1,11 @@
 import type { SpamAiClassification, SpamAiClassifier, SpamSignal } from "../types";
-import { AI_SPAM_MAX_BODY_CHARS, AI_SPAM_TIMEOUT_MS, JEV_MODEL_ID, SPAM_WEIGHTS } from "../weights";
+import { AI_MODEL_ID, AI_MODEL_SELECTOR, AI_SPAM_MAX_BODY_CHARS, AI_SPAM_TIMEOUT_MS, SPAM_WEIGHTS } from "../weights";
 
 type AiBinding = {
 	run(model: string, input: Record<string, unknown>): Promise<unknown>;
 };
 
-type JevChoiceAnswer = {
+type ChoiceAnswer = {
 	type?: string;
 	choice?: string;
 	confidence?: number;
@@ -25,7 +25,7 @@ const QUESTIONS = {
 } as const;
 
 function normalizeAnswer(response: Record<string, unknown>): SpamAiClassification | null {
-	const answers = response.answers as { classification?: JevChoiceAnswer } | undefined;
+	const answers = response.answers as { classification?: ChoiceAnswer } | undefined;
 	const answer = answers?.classification;
 	if (!answer) return null;
 	if (answer.type && answer.type !== "choice") return null;
@@ -40,7 +40,7 @@ function normalizeAnswer(response: Record<string, unknown>): SpamAiClassificatio
 	return { choice, probability: Math.max(0, Math.min(1, probability)) };
 }
 
-export function createJevSpamClassifier(ai: unknown, timeoutMs: number = AI_SPAM_TIMEOUT_MS): SpamAiClassifier | null {
+export function createAiSpamClassifier(ai: unknown, timeoutMs: number = AI_SPAM_TIMEOUT_MS): SpamAiClassifier | null {
 	const binding = ai as AiBinding | null;
 	if (!binding) return null;
 	return {
@@ -52,7 +52,7 @@ export function createJevSpamClassifier(ai: unknown, timeoutMs: number = AI_SPAM
 				urls: input.urlDomains.slice(0, 20),
 			};
 			const response = await Promise.race([
-				binding.run(JEV_MODEL_ID, { state, questions: QUESTIONS }) as Promise<Record<string, unknown>>,
+				binding.run(AI_MODEL_ID, { model: AI_MODEL_SELECTOR, state, questions: QUESTIONS }) as Promise<Record<string, unknown>>,
 				new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
 			]);
 			return response ? normalizeAnswer(response) : null;
@@ -60,7 +60,7 @@ export function createJevSpamClassifier(ai: unknown, timeoutMs: number = AI_SPAM
 	};
 }
 
-export async function classifyWithJev(
+export async function classifyWithAi(
 	classifier: SpamAiClassifier,
 	input: Parameters<SpamAiClassifier["classify"]>[0],
 ): Promise<SpamAiClassification | null> {

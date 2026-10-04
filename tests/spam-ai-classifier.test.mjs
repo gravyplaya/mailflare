@@ -21,7 +21,7 @@ await build({
 	logLevel: "silent",
 });
 
-const { createJevSpamClassifier, aiClassificationSignal, classifyWithJev } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
+const { createAiSpamClassifier, aiClassificationSignal, classifyWithAi } = await import(pathToFileURL(join(outDir, "entry.mjs")).href);
 
 function fakeAi(response, calls = []) {
 	return {
@@ -35,19 +35,20 @@ function fakeAi(response, calls = []) {
 
 const hang = () => new Promise(() => {});
 
-test("createJevSpamClassifier returns null without an AI binding", () => {
-	assert.equal(createJevSpamClassifier(null), null);
+test("createAiSpamClassifier returns null without an AI binding", () => {
+	assert.equal(createAiSpamClassifier(null), null);
 });
 
-test("classify sends state and fixed choice questions to the Jev model", async () => {
+test("classify sends state and fixed choice questions to the Clef model", async () => {
 	const calls = [];
-	const classifier = createJevSpamClassifier(fakeAi({
+	const classifier = createAiSpamClassifier(fakeAi({
 		answers: { classification: { type: "choice", choice: "spam", confidence: 0.9, probabilities: { spam: 0.97, suspicious: 0.03, legitimate: 0 } } },
 	}, calls));
 	const classification = await classifier.classify({ sender: "spam@example.com", subject: "Win big", body: "Click here now", urlDomains: ["trap.example"] });
 	assert.deepEqual(classification, { choice: "spam", probability: 0.97 });
 	assert.equal(calls.length, 1);
-	assert.equal(calls[0].model, "typesafe/jev");
+	assert.equal(calls[0].model, "@cf/cloudflare/clef");
+	assert.equal(calls[0].input.model, "clef");
 	const questions = calls[0].input.questions.classification;
 	assert.equal(questions.type, "choice");
 	assert.deepEqual(Object.keys(questions.criteria), ["spam", "suspicious", "legitimate"]);
@@ -55,20 +56,20 @@ test("classify sends state and fixed choice questions to the Jev model", async (
 });
 
 test("confidence falls back when probabilities are missing and rejects unknown choices", async () => {
-	const classifier = createJevSpamClassifier(fakeAi({ answers: { classification: { type: "choice", choice: "suspicious", confidence: 0.82 } } }));
+	const classifier = createAiSpamClassifier(fakeAi({ answers: { classification: { type: "choice", choice: "suspicious", confidence: 0.82 } } }));
 	assert.deepEqual(await classifier.classify({ sender: "a@b.c", subject: "", body: "", urlDomains: [] }), { choice: "suspicious", probability: 0.82 });
-	const broken = createJevSpamClassifier(fakeAi({ answers: { classification: { type: "choice", choice: "make_money_fast", confidence: 1 } } }));
+	const broken = createAiSpamClassifier(fakeAi({ answers: { classification: { type: "choice", choice: "make_money_fast", confidence: 1 } } }));
 	assert.equal(await broken.classify({ sender: "a@b.c", subject: "", body: "", urlDomains: [] }), null);
 });
 
 test("classify fails open on timeout", async () => {
-	const classifier = createJevSpamClassifier({ run: hang }, 30);
+	const classifier = createAiSpamClassifier({ run: hang }, 30);
 	assert.equal(await classifier.classify({ sender: "a@b.c", subject: "", body: "", urlDomains: [] }), null);
 });
 
-test("classifyWithJev swallows classifier errors", async () => {
+test("classifyWithAi swallows classifier errors", async () => {
 	const failing = { classify: () => Promise.reject(new Error("boom")) };
-	assert.equal(await classifyWithJev(failing, { sender: "", subject: "", body: "", urlDomains: [] }), null);
+	assert.equal(await classifyWithAi(failing, { sender: "", subject: "", body: "", urlDomains: [] }), null);
 });
 
 test("high-confidence spam auto-files, medium-confidence stays suspicious", () => {

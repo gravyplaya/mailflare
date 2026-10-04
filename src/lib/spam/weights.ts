@@ -10,7 +10,8 @@ export const SPAM_WEIGHTS = {
 
 export const AI_SPAM_TIMEOUT_MS = 4_000;
 export const AI_SPAM_MAX_BODY_CHARS = 12_000;
-export const JEV_MODEL_ID = "typesafe/jev";
+export const AI_MODEL_ID = "@cf/cloudflare/clef";
+export const AI_MODEL_SELECTOR = "clef";
 
 export const MAX_CANDIDATE_TOKENS = 500;
 export const MAX_BAYESIAN_TOKENS = 20;
