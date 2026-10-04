@@ -3,7 +3,7 @@ import type { AppDatabase } from "@/db";
 import { contacts, spamReputation } from "@/db/schema";
 import { getEmailAddress } from "@/lib/email/address";
 import { analyzeAuthentication } from "./analyzers/authentication";
-import { aiClassificationSignal, classifyWithJev } from "./analyzers/ai";
+import { aiClassificationSignal, classifyWithAi } from "./analyzers/ai";
 import { getReputationKeys } from "./analyzers/reputation";
 import { analyzeStructure } from "./analyzers/structure";
 import { analyzeUrls } from "./analyzers/urls";
@@ -37,7 +37,7 @@ export async function analyzeSpam(db: AppDatabase, input: SpamAnalysisInput): Pr
 	if (contact?.source === "outbound") signals.push({ id: "previously_sent", score: SPAM_WEIGHTS.relationships.previouslySentTo, reason: "You have previously sent email to this address" });
 
 	if (input.aiClassifier) {
-		const classification = await classifyWithJev(input.aiClassifier, {
+		const classification = await classifyWithAi(input.aiClassifier, {
 			sender,
 			subject: input.message.subject ?? "",
 			body: prepared.visibleText,

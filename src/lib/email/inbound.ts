@@ -17,7 +17,7 @@ import { resolveThreadId } from "@/lib/email/threading";
 import { normalizeMessageId } from "@/lib/email/thread-lookup";
 import type { SessionUser } from "@/lib/auth/types";
 import { analyzeSpam } from "@/lib/spam/engine";
-import { createJevSpamClassifier } from "@/lib/spam/analyzers/ai";
+import { createAiSpamClassifier } from "@/lib/spam/analyzers/ai";
 import { getReputationKeys } from "@/lib/spam/analyzers/reputation";
 import { recordReputationObservation } from "@/lib/spam/repository";
 import {
@@ -111,7 +111,7 @@ export async function processInboundMessage(
 				envelopeFrom: payload.from,
 				headers: payload.headers,
 				message: parsed,
-				aiClassifier: owner?.aiEnabled === false ? null : createJevSpamClassifier(env.AI),
+				aiClassifier: owner?.aiEnabled === false ? null : createAiSpamClassifier(env.AI),
 			});
 		} catch (error) {
 			spamAnalysisError = error instanceof Error ? error.message.slice(0, 300) : "Spam analysis failed";
