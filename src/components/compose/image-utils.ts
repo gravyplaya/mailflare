@@ -54,7 +54,7 @@ export function stripDeadInlineImages(html: string): string {
 export type InlineImageSource = { src: string; contentId: string | null };
 
 export function draftAttachmentUrl(draftId: string, attachmentId: string): string {
-	return `/api/drafts/${draftId}/attachments/${attachmentId}/content`;
+	return `/api/drafts/${draftId}/attachments/${attachmentId}`;
 }
 
 /** Point every draft-attachment or blob source at its cid: reference for sending. */
