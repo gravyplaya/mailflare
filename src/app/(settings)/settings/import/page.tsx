@@ -1,8 +1,8 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
-import { Folder, Server, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Folder, Link2, Server, Upload } from "lucide-react";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,23 +18,40 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { importMessageFiles } from "@/components/settings/import-messages-utils";
 import type {
+  ComposioFormState,
   ImapFormState,
+  ImportFolderSummary,
   ImportResult,
   ImportSourceItem,
   ImportSourceSection,
   ImportTab,
   ImportProgress,
+  LinkedAccountSummary,
+  GmailLabelOption,
+  ComposioAccountSummary,
 } from "./types";
 import {
+  COMPOSIO_NEW_FOLDER,
+  composioSystemDestinations,
+  createLinkedAccount,
   ensureImportDestination,
+  fetchComposioAccounts,
+  fetchGmailLabels,
   fetchImapFolders,
+  fetchLinkedAccounts,
   filterCustomImapFolders,
   formatImportResult,
-  getFileImportSource,
+  getComposioDestinationLabel,
   getFolderImportSource,
+  getGmailLabelDisplayName,
+  getGmailLabelQuery,
+  getFileImportSource,
   getSelectedImportSources,
+  importFromComposio,
   importFromImap,
   importSourceOptions,
+  listMailboxFolders,
+  resolveComposioDestination,
   resolveImapSourceFolder,
 } from "./utils";
 
@@ -46,6 +63,15 @@ const initialImapForm: ImapFormState = {
   password: "",
   folder: "INBOX",
   limit: "25",
+};
+
+const initialComposioForm: ComposioFormState = {
+  connectedAccountId: "",
+  query: "",
+  limit: "25",
+  saveLink: true,
+  destination: "system:inbox",
+  newFolderName: "",
 };
 
 const defaultSections = importSourceOptions.map((option) => option.value);
@@ -66,6 +92,36 @@ export default function SettingsImportPage() {
   const [imapError, setImapError] = useState<string | null>(null);
   const [imapLoading, setImapLoading] = useState(false);
   const [imapProgress, setImapProgress] = useState<ImportProgress | null>(null);
+  const [composioForm, setComposioForm] = useState<ComposioFormState>(initialComposioForm);
+  const [composioResult, setComposioResult] = useState<ImportResult | null>(null);
+  const [composioError, setComposioError] = useState<string | null>(null);
+  const [composioLoading, setComposioLoading] = useState(false);
+  const [composioStatus, setComposioStatus] = useState<string | null>(null);
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountSummary[]>([]);
+  const [composioFolders, setComposioFolders] = useState<ImportFolderSummary[]>([]);
+  const [gmailLabels, setGmailLabels] = useState<GmailLabelOption[]>([]);
+  const [sourceLabelId, setSourceLabelId] = useState("");
+  const [composioAccounts, setComposioAccounts] = useState<ComposioAccountSummary[]>([]);
+
+  function applyGmailLabel(labelId: string) {
+    setSourceLabelId(labelId);
+    if (!labelId) {
+      setComposioForm((current) => ({ ...current, query: "" }));
+      return;
+    }
+    const label = gmailLabels.find((item) => item.id === labelId);
+    if (label) {
+      setComposioForm((current) => ({ ...current, query: getGmailLabelQuery(label) }));
+    }
+  }
+
+  function loadGmailLabels(accountId: string) {
+    const trimmed = accountId.trim();
+    if (!trimmed) return;
+    fetchGmailLabels(trimmed)
+      .then(setGmailLabels)
+      .catch(() => setGmailLabels([]));
+  }
   const selectedSources = useMemo(
     () => getSelectedImportSources(selectedSections),
     [selectedSections],
@@ -182,6 +238,72 @@ export default function SettingsImportPage() {
     }
   }
 
+  useEffect(() => {
+    if (activeTab !== "composio") return;
+    let cancelled = false;
+    fetchLinkedAccounts()
+      .then((data) => {
+        if (!cancelled) setLinkedAccounts(data.accounts);
+      })
+      .catch(() => {});
+    fetchComposioAccounts()
+      .then((accounts) => {
+        if (!cancelled) setComposioAccounts(accounts);
+      })
+      .catch(() => {});
+    if (selectedMailbox?.id) {
+      listMailboxFolders(selectedMailbox.id)
+        .then((folders) => {
+          if (!cancelled) setComposioFolders(folders);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedMailbox?.id]);
+
+  // An account can only be linked to one mailbox; guard against accidentally
+  // moving an existing link by importing from a different selected mailbox.
+  const linkedAccountForForm = useMemo(
+    () => linkedAccounts.find((item) => item.connectedAccountId === composioForm.connectedAccountId.trim()),
+    [linkedAccounts, composioForm.connectedAccountId],
+  );
+  const linkedElsewhere = Boolean(
+    linkedAccountForForm && selectedMailbox?.id && linkedAccountForForm.mailboxId !== selectedMailbox.id,
+  );
+  const shouldSaveLink = composioForm.saveLink && !linkedElsewhere;
+
+  async function onComposioSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedMailbox?.id) return;
+    setComposioLoading(true);
+    setComposioError(null);
+    setComposioResult(null);
+    setComposioStatus(shouldSaveLink ? "Linking to mailbox" : "Fetching messages from Gmail");
+    try {
+      const destination = await resolveComposioDestination(selectedMailbox.id, composioForm);
+      if (shouldSaveLink) {
+        await createLinkedAccount(selectedMailbox.id, composioForm, destination);
+      }
+      setComposioStatus("Fetching messages from Gmail");
+      const result = await importFromComposio(selectedMailbox.id, composioForm, destination);
+      setComposioResult(result);
+      setComposioStatus(null);
+      window.dispatchEvent(new Event("mailflare:messages-changed"));
+      fetchLinkedAccounts()
+        .then((data) => setLinkedAccounts(data.accounts))
+        .catch(() => {});
+    } catch (error) {
+      setComposioStatus(null);
+      setComposioError(
+        error instanceof Error ? error.message : "Composio import failed",
+      );
+    } finally {
+      setComposioLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* <div>
@@ -216,8 +338,10 @@ export default function SettingsImportPage() {
               >
                 <option value="file">Backup File</option>
                 <option value="imap">IMAP</option>
+                <option value="composio">Gmail (Composio)</option>
               </Select>
             </div>
+            {activeTab !== "composio" && (
             <div className="space-y-2">
               <Label>Choose import sections</Label>
 
@@ -255,6 +379,7 @@ export default function SettingsImportPage() {
             Mailflare folders.
           </p> */}
             </div>
+            )}
 
             {activeTab === "file" ? (
               <>
@@ -324,7 +449,7 @@ export default function SettingsImportPage() {
                   )}
                 </form>
               </>
-            ) : (
+            ) : activeTab === "imap" ? (
               <>
                 <form onSubmit={onImapSubmit} className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_110px]">
@@ -464,6 +589,243 @@ export default function SettingsImportPage() {
                   {imapError && (
                     <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
                       {imapError}
+                    </p>
+                  )}
+                </form>
+              </>
+            ) : (
+              <>
+                <form onSubmit={onComposioSubmit} className="space-y-4">
+                  {composioAccounts.length > 0 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="composio-saved">Gmail accounts from Composio</Label>
+                      <Select
+                        id="composio-saved"
+                        value={composioAccounts.some((account) => account.connectedAccountId === composioForm.connectedAccountId.trim()) ? composioForm.connectedAccountId.trim() : ""}
+                        onChange={(event) => {
+                          const accountId = event.target.value;
+                          if (!accountId) return;
+                          setComposioForm((current) => ({ ...current, connectedAccountId: accountId }));
+                          loadGmailLabels(accountId);
+                        }}
+                        className="text-sm w-full py-2"
+                      >
+                        <option value="">Choose a Gmail account…</option>
+                        {composioAccounts.map((account) => {
+                          const linked = linkedAccounts.find(
+                            (item) => item.connectedAccountId === account.connectedAccountId,
+                          );
+                          const mailboxLabel = linked
+                            ? ` — linked to ${linked.mailboxName ?? linked.mailboxLocalPart ?? linked.mailboxId}`
+                            : "";
+                          return (
+                            <option key={account.connectedAccountId} value={account.connectedAccountId}>
+                              {account.email ?? account.connectedAccountId}
+                              {mailboxLabel}
+                            </option>
+                          );
+                        })}
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="composio-account">
+                      Composio connected account ID
+                    </Label>
+                    <Input
+                      id="composio-account"
+                      value={composioForm.connectedAccountId}
+                      onChange={(event) =>
+                        setComposioForm({
+                          ...composioForm,
+                          connectedAccountId: event.target.value,
+                        })
+                      }
+                      onBlur={(event) => loadGmailLabels(event.target.value)}
+                      placeholder="ca_..."
+                      autoComplete="off"
+                    />
+                    <p className="text-xs leading-5 text-neutral-500">
+                      Find the ID under Connected Accounts at
+                      app.composio.dev. Your Composio API key is configured on
+                      the server, and your Google token never reaches Mailflare.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="composio-source-label">Gmail folder (source)</Label>
+                    <Select
+                      id="composio-source-label"
+                      value={sourceLabelId}
+                      onChange={(event) => applyGmailLabel(event.target.value)}
+                      className="text-sm w-full py-2"
+                    >
+                      <option value="">All mail (or use a custom query below)</option>
+                      {gmailLabels.length > 0 && (
+                        <optgroup label="System">
+                          {gmailLabels
+                            .filter((label) => label.type === "system")
+                            .map((label) => (
+                              <option key={label.id} value={label.id}>
+                                {getGmailLabelDisplayName(label)}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {gmailLabels.some((label) => label.type === "user") && (
+                        <optgroup label="Labels">
+                          {gmailLabels
+                            .filter((label) => label.type === "user")
+                            .map((label) => (
+                              <option key={label.id} value={label.id}>
+                                {getGmailLabelDisplayName(label)}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="composio-query">
+                      Gmail search query (optional)
+                    </Label>
+                    <Input
+                      id="composio-query"
+                      value={composioForm.query}
+                      onChange={(event) => {
+                        setSourceLabelId("");
+                        setComposioForm({
+                          ...composioForm,
+                          query: event.target.value,
+                        });
+                      }}
+                      placeholder='e.g. "in:inbox" or "from:news@example.com"'
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="composio-destination">
+                        Import destination
+                      </Label>
+                      <Select
+                        id="composio-destination"
+                        value={composioForm.destination}
+                        onChange={(event) =>
+                          setComposioForm({
+                            ...composioForm,
+                            destination: event.target.value,
+                          })
+                        }
+                        className="text-sm w-full py-2"
+                      >
+                        <optgroup label="Mail sections">
+                          {composioSystemDestinations.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Folders">
+                          {composioFolders.map((folder) => (
+                            <option key={folder.id} value={`folder:${folder.id}`}>
+                              {folder.name}
+                            </option>
+                          ))}
+                          <option value={COMPOSIO_NEW_FOLDER}>
+                            New folder…
+                          </option>
+                        </optgroup>
+                      </Select>
+                    </div>
+                    {composioForm.destination === COMPOSIO_NEW_FOLDER && (
+                      <div className="space-y-2">
+                        <Label htmlFor="composio-new-folder">
+                          New folder name
+                        </Label>
+                        <Input
+                          id="composio-new-folder"
+                          value={composioForm.newFolderName}
+                          onChange={(event) =>
+                            setComposioForm({
+                              ...composioForm,
+                              newFolderName: event.target.value,
+                            })
+                          }
+                          placeholder="e.g. Gmail"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="composio-limit">Message limit</Label>
+                      <Input
+                        id="composio-limit"
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={composioForm.limit}
+                        onChange={(event) =>
+                          setComposioForm({
+                            ...composioForm,
+                            limit: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <label className="flex items-end gap-2 pb-2 text-sm text-neutral-700">
+                      <Checkbox
+                        checked={composioForm.saveLink}
+                        disabled={linkedElsewhere}
+                        onChange={(event) =>
+                          setComposioForm({
+                            ...composioForm,
+                            saveLink: event.target.checked,
+                          })
+                        }
+                      />
+                      Link this account to {selectedMailbox?.localPart ?? "this mailbox"} for future syncing
+                    </label>
+                  </div>
+                  {linkedElsewhere && (
+                    <p className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+                      This account is already linked to{" "}
+                      {linkedAccountForForm?.mailboxName ?? linkedAccountForForm?.mailboxLocalPart ?? "another mailbox"}
+                      . You can import from it here without changing that link.
+                    </p>
+                  )}
+                  <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs leading-5 text-neutral-500">
+                    Messages are imported into{" "}
+                    {getComposioDestinationLabel(composioForm.destination, composioFolders)}{" "}
+                    of {selectedMailbox?.localPart ?? "the selected mailbox"}.
+                    Existing messages are skipped automatically.
+                  </p>
+                  <Button
+                    type="submit"
+                    disabled={
+                      !selectedMailbox ||
+                      !composioForm.connectedAccountId ||
+                      composioLoading
+                    }
+                  >
+                    <Link2 className="h-4 w-4" />
+                    {composioLoading ? "Importing..." : "Import from Gmail"}
+                  </Button>
+                  {composioStatus && (
+                    <div
+                      className="space-y-1 text-xs text-neutral-500"
+                      aria-live="polite"
+                    >
+                      {composioStatus}
+                    </div>
+                  )}
+                  {composioResult && (
+                    <p className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700">
+                      {formatImportResult(composioResult)}
+                    </p>
+                  )}
+                  {composioError && (
+                    <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {composioError}
                     </p>
                   )}
                 </form>

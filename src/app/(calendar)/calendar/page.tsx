@@ -20,6 +20,15 @@ import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { useSidebar } from "@/components/sidebar-state";
 import { UpcomingSidebar } from "../upcoming-sidebar";
 import type { CalendarEvent, CalendarView, EventDragPreview, EventResizeEdge, EventResizeSession } from "./types";
+
+export type LinkedCalendarSummary = {
+	id: string;
+	connectedAccountId: string;
+	calendarId: string;
+	label: string | null;
+	lastSyncedAt: string | null;
+	lastError: string | null;
+};
 import {
   addDays, addMonths, calendarAnchorDay, CALENDAR_END_HOUR, CALENDAR_HOUR_HEIGHT, CALENDAR_START_HOUR,
   currentTimePosition, dateKey, defaultCalendarStart, dropStartForPosition, EVENT_COLOR_CLASSES, eventEndAfterMinutes, eventPosition, expandCalendarEvents,
@@ -61,6 +70,8 @@ export default function CalendarPage() {
   const [description, setDescription] = useState("");
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [pendingAction, setPendingAction] = useState<"save" | string | null>(null);
+  const [linkedCalendars, setLinkedCalendars] = useState<LinkedCalendarSummary[]>([]);
+  const [googleTarget, setGoogleTarget] = useState("");
   const { selectedMailbox } = useSelectedMailbox();
   const { minimal } = useSidebar();
 
@@ -87,6 +98,19 @@ export default function CalendarPage() {
   useEffect(() => {
     setHeaderTarget(document.getElementById("calendar-header-slot"));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    authFetch("/api/linked-calendars")
+      .then((response) => response.json() as Promise<{ calendars?: LinkedCalendarSummary[] }>)
+      .then((data) => {
+        if (active) setLinkedCalendars(data.calendars ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [eventsVersion]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -181,6 +205,7 @@ export default function CalendarPage() {
           mailboxId: selectedMailbox?.id,
           from: selectedMailbox?.senderAddresses?.[0] ??
             (selectedMailbox ? `${selectedMailbox.localPart}@${selectedMailbox.hostname}` : ""),
+          googleCalendarId: editing ? undefined : (googleTarget || undefined),
         }),
       });
       if (response.ok) {
@@ -463,11 +488,11 @@ export default function CalendarPage() {
                       <button type="button" draggable={pendingAction === null} onClick={() => editEvent(event)}
                         onDragStart={(dragEvent) => { dragOffsetPixels.current = dragEvent.clientY - dragEvent.currentTarget.getBoundingClientRect().top; dragEvent.dataTransfer.setData("text/plain", event.id); dragEvent.dataTransfer.effectAllowed = "move"; setDraggedEvent(event); }}
                         onDragEnd={() => { setDraggedEvent(null); setDragPreview(null); }}
-                        title={`${event.title} · ${formatEventRange(event)}`}
+                        title={`${event.title} · ${formatEventRange(event)}${event.sourceLabel ? ` · ${event.sourceLabel}` : ""}`}
                         className={`absolute left-1 right-1 z-10 flex cursor-move flex-col items-start justify-start overflow-hidden rounded-lg pr-2 pl-4 text-left hover:brightness-95 ${isPastEvent ? PAST_EVENT_COLOR_CLASSES[eventColor] : EVENT_COLOR_CLASSES[eventColor]} ${position.height >= 20 ? "py-1.5" : "py-0"} ${draggedEvent?.id === event.id || resizingEvent?.id === event.id ? "opacity-40" : ""}`}
                         style={{ top: position.top, height: position.height }}>
                           <span className="absolute top-1 left-1 block h-[calc(100%-8px)] w-1 rounded-xl bg-current" />
-                        {position.height >= 15 && <span className="block w-full truncate text-[12px] font-semibold leading-4">{event.title}</span>}
+                        {position.height >= 15 && <span className="block w-full truncate text-[12px] font-semibold leading-4">{event.title}{event.sourceLabel ? <span className="ml-1 rounded bg-black/10 px-1 align-middle text-[9px] font-medium uppercase leading-4 tracking-wide">{event.sourceLabel}</span> : null}</span>}
                         {position.height >= 34 && <span className="block w-full truncate text-[11px] leading-4 opacity-70">{formatEventRange(event)}</span>}
                       </button>
                       {(["start", "end"] as const).filter((edge) => edge === "start" ? canResizeStart : canResizeEnd).map((edge) => (
@@ -585,6 +610,23 @@ export default function CalendarPage() {
                 <AlignLeft aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add description" aria-label="Description" rows={Math.max(1, description.split("\n").length)} className={clsx("min-h-9 border-transparent bg-transparent px-2 py-2 shadow-none hover:bg-white/60 focus:min-h-24 focus:resize-y focus:border-blue-600 focus:bg-white focus-visible:ring-0", description ? "min-h-24 resize-y" : "resize-none")} />
               </div>
+              {!editing && linkedCalendars.length > 0 && (
+                <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
+                  <CalendarPlus2 aria-hidden="true" className="h-5 w-5 text-neutral-600" />
+                  <div className="relative">
+                    <select value={googleTarget} onChange={(event) => setGoogleTarget(event.target.value)} aria-label="Add to calendar"
+                      className="h-9 w-full appearance-none rounded-md border border-transparent bg-transparent pl-2 pr-8 text-sm text-neutral-700 outline-none hover:bg-neutral-50 focus:border-blue-600 focus:bg-white">
+                      <option value="">Mailflare only</option>
+                      {linkedCalendars.map((calendar) => (
+                        <option key={calendar.id} value={calendar.connectedAccountId}>
+                          Google — {calendar.label ?? calendar.calendarId}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-3">
                 <Palette aria-hidden="true" className="h-5 w-5 text-neutral-600" />
                 <div role="radiogroup" aria-label="Event color" className="flex flex-wrap items-center gap-1.5 px-2">

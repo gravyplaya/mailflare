@@ -21,6 +21,10 @@ export const settingsNavSections: SettingsNavSection[] = [
 				label: "API keys",
 			},
 			{
+				href: "/settings/calendars",
+				label: "Calendars",
+			},
+			{
 				href: "/settings/app-passwords",
 				label: "App passwords",
 			},

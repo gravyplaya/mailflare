@@ -15,6 +15,7 @@ import { MessageDetailSkeleton } from "@/components/page-skeletons";
 import { usePageLoading } from "@/components/page-loading";
 import { PreviousMessage } from "@/components/previous-message";
 import { ConversationThread } from "@/components/messages/conversation-thread";
+import { InviteRsvpCard } from "@/components/messages/invite-rsvp-card";
 import { MessageDetailNavigation } from "@/components/messages/message-detail-navigation";
 import { MessageReadingHeaderButton } from "@/components/messages/message-reading-header-button";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
@@ -312,6 +313,11 @@ export default function MessageDetailPage() {
                   </a>
                 ))}
               </div>
+            </section>
+          )}
+          {data.invite && (
+            <section className="mt-8 py-2 pl-16">
+              <InviteRsvpCard messageId={message.id} invite={data.invite} />
             </section>
           )}
           {attachments.length > 0 && (

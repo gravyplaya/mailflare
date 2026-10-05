@@ -47,6 +47,9 @@
       "GITHUB_UPDATE_REPO": {
         "description": "Your github repository that connect to cloudflare worker"
       },
+      "COMPOSIO_API_KEY": {
+        "description": "Optional Composio project API key used to import and sync Gmail through linked accounts. Create a Gmail connected account at app.composio.dev, then paste its connected account ID in Settings → Import. Paste only the key secret value."
+      },
       "CF_EMAIL": {
         "description": "Legacy Global API Key auth only. Use this with `CF_API_KEY` instead of `CF_TOKEN`."
       },
