@@ -121,7 +121,8 @@ export function getMessageActionRedirect(
   action: BulkMessageAction,
   direction: "inbound" | "outbound",
 ) {
-  if (action === "trash") return "/trash";
+  // Deleting from the message view returns to the inbox, not the trash view.
+  if (action === "trash") return "/inbox";
   if (action === "spam") return "/spam";
   if (action === "archive") return "/archived";
   if (action === "inbox") return "/inbox";

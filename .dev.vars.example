@@ -12,3 +12,9 @@ CF_TOKEN=your_api_token_with_zone_email_permissions
 
 # The Worker uses the AI binding in wrangler.jsonc. Override its chat/draft model if needed.
 # AI_MODEL=@cf/moonshotai/kimi-k2.5
+
+# Optional: Composio project API key for importing/syncing Gmail via linked accounts.
+# Create a connected account for Gmail at app.composio.dev, then paste its
+# connected account ID in Settings → Import → Gmail (Composio).
+# COMPOSIO_API_KEY=your_composio_project_api_key
+# COMPOSIO_BASE_URL=https://backend.composio.dev

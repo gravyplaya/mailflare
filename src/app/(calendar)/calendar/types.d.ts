@@ -16,6 +16,8 @@ export type CalendarEvent = {
   excludedOccurrences: string;
   timeZone?: string | null;
   seriesStartsAt?: string;
+  source?: string;
+  sourceLabel?: string | null;
 };
 
 export type CalendarView = "week" | "day";

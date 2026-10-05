@@ -19,6 +19,8 @@ import {
 import { runScheduledDatabaseBackup } from "./src/lib/backups/runner";
 import { processAgentDraftJob } from "./src/lib/agent/jobs/utils";
 import { runAgentMaintenance } from "./src/lib/agent/maintenance";
+import { runGmailSync } from "./src/lib/composio/sync";
+import { runGoogleCalendarSync } from "./src/lib/calendar/google-sync";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
@@ -123,6 +125,10 @@ export default {
 
 	async scheduled(controller: ScheduledController, env: CloudflareEnv, ctx: ExecutionContext) {
 		if (controller.cron === "0 2 * * *") ctx.waitUntil(runScheduledDatabaseBackup(env, new Date(controller.scheduledTime)));
+		if (controller.cron === "*/5 * * * *") {
+			ctx.waitUntil(runGmailSync(env));
+			ctx.waitUntil(runGoogleCalendarSync(env));
+		}
 		ctx.waitUntil(runAgentMaintenance(env));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

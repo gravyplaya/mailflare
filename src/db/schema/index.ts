@@ -411,6 +411,14 @@ export const calendarEvents = sqliteTable(
 		repeatDays: text("repeat_days").notNull().default("[]"),
 		repeatAnchorDay: integer("repeat_anchor_day"),
 		repeatUntil: integer("repeat_until", { mode: "timestamp" }),
+		/** Where this event came from: "local" (created in Mailflare), "google" (synced), or "invite" (accepted from an email). */
+		source: text("source").notNull().default("local"),
+		/** Provider-specific reference, e.g. google:{connectedAccountId}:{eventId} or invite:{uid}; unique when present. */
+		externalRef: text("external_ref"),
+		/** Human label for where the event came from, e.g. the Google account email. */
+		sourceLabel: text("source_label"),
+		/** iCalendar UID shared by invite emails and Google events, used to dedupe the same meeting across sources. */
+		icalUid: text("ical_uid"),
 		excludedOccurrences: text("excluded_occurrences").notNull().default("[]"),
 		timeZone: text("time_zone"),
 		startsAt: integer("starts_at", { mode: "timestamp" }).notNull(),
@@ -418,7 +426,28 @@ export const calendarEvents = sqliteTable(
 		createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 		updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 	},
-	(t) => [index("calendar_events_user_starts_idx").on(t.userId, t.startsAt)],
+	(t) => [index("calendar_events_user_starts_idx").on(t.userId, t.startsAt), uniqueIndex("calendar_events_external_ref_idx").on(t.externalRef)],
+);
+
+export const linkedCalendars = sqliteTable(
+	"linked_calendars",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		connectedAccountId: text("connected_account_id").notNull(),
+		calendarId: text("calendar_id").notNull().default("primary"),
+		calendarSummary: text("calendar_summary"),
+		/** Google events.list syncToken cursor for incremental sync. */
+		syncToken: text("sync_token"),
+		lastSyncedAt: integer("last_synced_at", { mode: "timestamp" }),
+		lastError: text("last_error"),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [uniqueIndex("linked_calendars_account_calendar_idx").on(t.connectedAccountId, t.calendarId)],
 );
 
 export const bookingEvents = sqliteTable(
@@ -783,6 +812,37 @@ export const mcpKeyMailboxes = sqliteTable("mcp_key_mailboxes", {
 	mailboxId: text("mailbox_id").notNull().references(() => mailboxes.id, { onDelete: "cascade" }),
 }, (t) => [uniqueIndex("mcp_key_mailbox_idx").on(t.keyId, t.mailboxId)]);
 
+export const linkedAccounts = sqliteTable(
+	"linked_accounts",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		mailboxId: text("mailbox_id")
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: "cascade" }),
+		provider: text("provider", { enum: ["gmail"] }).notNull().default("gmail"),
+		connectedAccountId: text("connected_account_id").notNull(),
+		emailAddress: text("email_address"),
+		/** Where imported and synced messages land; picked at link time. */
+		destination: text("destination").notNull().default("system:inbox"),
+		enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+		/** Gmail historyId cursor for incremental sync; null until the first baseline run. */
+		syncCursor: text("sync_cursor"),
+		lastSyncedAt: integer("last_synced_at", { mode: "timestamp" }),
+		lastError: text("last_error"),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("linked_accounts_provider_account_idx").on(t.provider, t.connectedAccountId),
+		index("linked_accounts_user_idx").on(t.userId),
+		index("linked_accounts_mailbox_idx").on(t.mailboxId),
+	],
+);
+
 export const schema = {
 	users,
 	domains,
@@ -820,4 +880,6 @@ export const schema = {
 	agentDraftMetadata,
 	agentSendApprovals,
 	mcpKeyMailboxes,
+	linkedAccounts,
+	linkedCalendars,
 };

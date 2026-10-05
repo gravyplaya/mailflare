@@ -28,6 +28,10 @@ interface CloudflareEnv {
 	GITHUB_UPDATE_TOKEN?: string;
 	GITHUB_UPDATE_REF?: string;
 	GITHUB_UPDATE_REPO?: string;
+	/** Composio project API key used to reach Gmail through linked accounts. */
+	COMPOSIO_API_KEY?: string;
+	/** Override for the Composio backend base URL (self-hosted or regional installs). */
+	COMPOSIO_BASE_URL?: string;
 	/** "node" when served by the self-hosted runtime in server/; unset on Workers. */
 	MAILFLARE_RUNTIME?: "node";
 	/** Shared secret the Cloudflare email relay signs inbound webhooks with (self-hosted only). */

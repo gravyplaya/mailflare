@@ -11,6 +11,8 @@ import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeat, normalizeCalendarRepeatDa
 import type { CalendarEventInput } from "./types";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
+import { pushEventCreateToGoogle } from "@/lib/calendar/google-push";
+import { linkedCalendars } from "@/db/schema";
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -39,6 +41,15 @@ export async function POST(request: Request) {
 	const event = { id: newId("evt"), userId: user.id, mailboxId: input.mailboxId ?? null, title: input.title.trim(), description: input.description?.trim() ?? "", location: input.location?.trim() ?? "", attendees: JSON.stringify(attendees), color: normalizeCalendarColor(input.color), repeat, repeatDays: JSON.stringify(repeatDays), repeatAnchorDay: repeat === "monthly" && Number.isInteger(input.repeatAnchorDay) && input.repeatAnchorDay! >= 1 && input.repeatAnchorDay! <= 31 ? input.repeatAnchorDay : null, startsAt, endsAt };
 	const savedEvent = { ...event, timeZone: input.timeZone ? normalizeTimeZone(input.timeZone) : getRequestTimeZone(request, user.timeZone) };
 	await getDb(env).insert(calendarEvents).values(savedEvent);
+	if (input.googleCalendarId) {
+		// Two-way: also create it on the chosen linked Google calendar; the sync keeps both in step.
+		const ref = await pushEventCreateToGoogle(env, user.id, input.googleCalendarId, savedEvent);
+		if (ref) {
+			const [googleLink] = await getDb(env).select({ label: linkedCalendars.calendarSummary }).from(linkedCalendars).where(eq(linkedCalendars.connectedAccountId, input.googleCalendarId)).limit(1);
+			await getDb(env).update(calendarEvents).set({ externalRef: ref, source: "google", sourceLabel: googleLink?.label ?? null, updatedAt: new Date() }).where(eq(calendarEvents.id, event.id));
+			Object.assign(savedEvent, { externalRef: ref, source: "google", sourceLabel: googleLink?.label ?? null });
+		}
+	}
 	if (attendees.length && input.mailboxId) {
 		const calendarFile = createCalendarInvitation({ ...event, uid: event.id });
 		await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: input.mailboxId!, from: input.from ?? "", to, subject: `Invitation: ${event.title}`, text: event.description || `You are invited to ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: calendarFile }] })));

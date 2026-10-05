@@ -16,4 +16,6 @@ export type CalendarEventInput = {
 	endsAt: string;
 	mailboxId?: string | null;
 	from?: string;
+	/** Connected account (ca_...) of the linked Google calendar to also create this event on. */
+	googleCalendarId?: string;
 };

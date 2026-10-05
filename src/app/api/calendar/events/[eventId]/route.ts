@@ -12,6 +12,7 @@ import { DEFAULT_REPEAT_DAYS, normalizeCalendarRepeat, normalizeCalendarRepeatDa
 import { newId } from "@/lib/ids";
 import { getRequestTimeZone, normalizeTimeZone } from "@/lib/time/utils";
 import { authorizeCalendarRequest, calendarKeyCanSendInvitations } from "@/lib/calendar/api-auth";
+import { pushEventDeleteToGoogle, pushEventUpdateToGoogle } from "@/lib/calendar/google-push";
 
 export async function PATCH(request: Request, { params }: CalendarEventRouteParams) {
 	const env = getEnv();
@@ -56,6 +57,9 @@ export async function PATCH(request: Request, { params }: CalendarEventRoutePara
 		await db.update(calendarEvents).set({ repeatUntil: splitAt, updatedAt: now }).where(eq(calendarEvents.id, existing.id));
 	} else {
 		await db.update(calendarEvents).set({ title: event.title, description: event.description, location: event.location, attendees: event.attendees, color: event.color, repeat: event.repeat, repeatDays: event.repeatDays, repeatAnchorDay: event.repeatAnchorDay, repeatUntil: event.repeatUntil, timeZone, startsAt, endsAt, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
+		if (existing.source === "google") {
+			await pushEventUpdateToGoogle(env, user.id, { externalRef: existing.externalRef, title: event.title, description: event.description, location: event.location, startsAt, endsAt, repeat: event.repeat, repeatDays: event.repeatDays, repeatUntil: event.repeatUntil, timeZone });
+		}
 	}
 	if (attendees.length && existing.mailboxId && input.from) { const file = createCalendarInvitation({ ...event, uid: existing.id }); await Promise.all(attendees.map((to) => sendEmail(env, { userId: user.id, mailboxId: existing.mailboxId!, from: input.from!, to, subject: `Updated invitation: ${event.title}`, text: event.description || `This event has been updated: ${event.title}.`, attachments: [{ filename: "invite.ics", type: "text/calendar; charset=utf-8", content: file }] }))); }
 	return NextResponse.json({ ok: true });
@@ -75,6 +79,9 @@ export async function DELETE(request: Request, { params }: CalendarEventRoutePar
 	if (!existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 	if (occurrence && (existing.repeat === "none" || occurrence.startsAt < existing.startsAt || (existing.repeatUntil && occurrence.startsAt >= existing.repeatUntil))) return NextResponse.json({ error: "Occurrence not found" }, { status: 404 });
 	if (existing.repeat !== "none" && effectiveFrom && effectiveFrom > existing.startsAt) await db.update(calendarEvents).set({ repeatUntil: effectiveFrom, updatedAt: new Date() }).where(eq(calendarEvents.id, existing.id));
-	else await db.delete(calendarEvents).where(eq(calendarEvents.id, existing.id));
+	else {
+		if (existing.source === "google") await pushEventDeleteToGoogle(env, user.id, existing.externalRef);
+		await db.delete(calendarEvents).where(eq(calendarEvents.id, existing.id));
+	}
 	return NextResponse.json({ ok: true });
 }

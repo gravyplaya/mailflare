@@ -25,7 +25,59 @@ export type ImportSourceOption = {
 	system?: boolean;
 };
 
-export type ImportTab = "file" | "imap";
+export type ImportTab = "file" | "imap" | "composio";
+
+export type ComposioFormState = {
+	connectedAccountId: string;
+	query: string;
+	limit: string;
+	saveLink: boolean;
+	/** "system:inbox" | "system:archived" | "system:spam" | "system:trash" | "folder:<id>" | "new-folder" */
+	destination: string;
+	newFolderName: string;
+};
+
+export type LinkedAccountSummary = {
+	id: string;
+	mailboxId: string;
+	mailboxName: string | null;
+	mailboxLocalPart: string | null;
+	provider: "gmail";
+	connectedAccountId: string;
+	emailAddress: string | null;
+	destination: string;
+	enabled: boolean;
+	lastSyncedAt: string | null;
+	lastError: string | null;
+	createdAt: string;
+};
+
+export type LinkedAccountsResponse = {
+	accounts?: LinkedAccountSummary[];
+	configured?: boolean;
+	error?: string;
+};
+
+export type GmailLabelOption = {
+	id: string;
+	name: string;
+	type: "system" | "user";
+};
+
+export type GmailLabelsResponse = {
+	labels?: GmailLabelOption[];
+	error?: string;
+};
+
+export type ComposioAccountSummary = {
+	connectedAccountId: string;
+	email: string | null;
+};
+
+export type ComposioAccountsResponse = {
+	accounts?: ComposioAccountSummary[];
+	error?: string;
+};
 
 export type ImportSourceItem = {
 	id: string;

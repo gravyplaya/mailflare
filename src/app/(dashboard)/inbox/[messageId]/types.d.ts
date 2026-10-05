@@ -9,7 +9,20 @@ export type MessageDetailResponse = {
 	} | null;
 	attachments?: MessageAttachment[];
 	unsubscribeUrl?: string | null;
+	invite?: MessageInvite | null;
 	error?: string;
+};
+
+export type MessageInvite = {
+	uid: string;
+	summary: string;
+	description: string;
+	location: string;
+	startsAt: string;
+	endsAt: string | null;
+	allDay: boolean;
+	organizerEmail: string | null;
+	responded: boolean;
 };
 
 export type MessageAttachment = {
