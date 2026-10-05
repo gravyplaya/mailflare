@@ -109,6 +109,7 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 	const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	const [keyCopied, setKeyCopied] = useState(false);
 
 	function reset() {
 		setStep("password");
@@ -118,6 +119,7 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 		setSecret("");
 		setRecoveryCodes([]);
 		setError(null);
+		setKeyCopied(false);
 	}
 
 	async function start(event: React.FormEvent) {
@@ -184,7 +186,25 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 						<details className="text-xs text-neutral-500">
 							<summary className="cursor-pointer">Can&apos;t scan? Enter the key manually</summary>
 							<code className="mt-2 block break-all rounded-md bg-neutral-50 p-2 font-mono text-neutral-800">{secret}</code>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="mt-2"
+								onClick={() => {
+									void navigator.clipboard.writeText(secret).then(() => {
+										setKeyCopied(true);
+										window.setTimeout(() => setKeyCopied(false), 2000);
+									});
+								}}
+							>
+								<Copy className="h-4 w-4" />
+								{keyCopied ? "Copied" : "Copy key"}
+							</Button>
 						</details>
+						<p className="text-xs text-neutral-500">
+							Your authenticator&apos;s key must end in <code className="rounded bg-neutral-100 px-1 font-mono">{secret.slice(-4)}</code>. If it ends in anything else, it is an entry from an earlier attempt: delete it and add this key again.
+						</p>
 						<div className="space-y-2">
 							<Label htmlFor="mfa-code">6-digit code</Label>
 							<Input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123 456" required autoFocus />
