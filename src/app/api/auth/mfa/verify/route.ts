@@ -10,7 +10,7 @@ import { readJsonBody } from "@/lib/http/request";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { recordAuthActivity } from "@/lib/auth/activity";
 import { consumeLoginChallenge, getLoginChallengeUserId } from "@/lib/auth/login-challenge";
-import { verifySecondFactor } from "@/lib/auth/mfa";
+import { secondFactorFailureReason, verifySecondFactor } from "@/lib/auth/mfa";
 
 /** Second step of a login: trade a challenge plus a TOTP or recovery code for a session. */
 export async function POST(request: Request) {
@@ -42,7 +42,10 @@ export async function POST(request: Request) {
 	}
 	const method = await verifySecondFactor(env, user, parsed.data.code);
 	if (!method) {
-		return NextResponse.json({ error: "That code did not match" }, { status: 401 });
+		// A code that matches nothing nearby is just wrong; one that matches a
+		// couple of steps out points at a device clock, which the user can fix.
+		const driftHint = await secondFactorFailureReason(user, parsed.data.code);
+		return NextResponse.json({ error: driftHint ?? "That code did not match" }, { status: 401 });
 	}
 
 	await consumeLoginChallenge(env, parsed.data.challengeToken);

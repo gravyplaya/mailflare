@@ -19,5 +19,7 @@ export async function POST(request: Request) {
 	if (auth.user.totpEnabled) {
 		return NextResponse.json({ error: "Two-factor authentication is already on" }, { status: 400 });
 	}
+	// The pending secret is reused across attempts, so this call only writes
+	// when there is nothing pending yet.
 	return NextResponse.json(await beginMfaEnrollment(env, auth.user), { headers: { "Cache-Control": "no-store" } });
 }

@@ -87,6 +87,27 @@ export async function verifyTotp(secret: string, code: string, at: number = Date
 	return matched;
 }
 
+/**
+ * How many steps away from the accepted window a code was generated, or null
+ * when it matches nothing nearby. Called only after `verifyTotp` failed, to
+ * tell a wrong-key failure from a device clock that is minutes off.
+ */
+export async function totpDrift(secret: string, code: string, at: number = Date.now()): Promise<number | null> {
+	const candidate = code.replace(/\s+/g, "");
+	if (!/^\d{6}$/.test(candidate)) return null;
+	const counter = totpCounter(at);
+	for (let distance = 2; distance <= 4; distance += 1) {
+		for (const delta of [-distance, distance]) {
+			const expected = await hotp(secret, counter + delta);
+			if (timingSafeEqual(expected, candidate)) return delta;
+		}
+	}
+	return null;
+}
+
+/** Seconds per step, so callers can phrase drift in units a user understands. */
+export const TOTP_STEP_SECONDS = STEP_SECONDS;
+
 export function timingSafeEqual(a: string, b: string): boolean {
 	if (a.length !== b.length) return false;
 	let diff = 0;
