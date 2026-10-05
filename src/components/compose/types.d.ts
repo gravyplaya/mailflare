@@ -22,6 +22,7 @@ export type ComposeStoredAttachment = {
 	size: number;
 	type: string;
 	disposition: "attachment" | "inline";
+	contentId?: string | null;
 };
 
 /** Headers a reply draft carries so the sent message joins its conversation. */

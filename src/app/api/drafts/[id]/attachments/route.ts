@@ -24,12 +24,15 @@ export async function POST(request: Request, { params }: DraftAttachmentUploadPa
 	try { form = await readFormDataBody(request, 30 * 1024 * 1024); }
 	catch (error) { return Response.json({ error: "Invalid attachment request" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 }); }
 	const files = form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0);
-	if (!files.length) return Response.json({ error: "No attachments provided" }, { status: 400 });
+	const inlineFiles = form.getAll("inlineAttachments").filter((value): value is File => value instanceof File && value.size > 0);
+	if (!files.length && !inlineFiles.length) return Response.json({ error: "No attachments provided" }, { status: 400 });
 	const existing = await listMessageAttachments(env, id);
 	const maxBytes = (await getOutboundAttachmentMaxMb(env)) * 1_000_000;
-	if (existing.length + files.length > MAX_ATTACHMENT_COUNT || files.some((file) => file.size > maxBytes) || existing.reduce((total, file) => total + file.size, 0) + files.reduce((total, file) => total + file.size, 0) > maxBytes) return Response.json({ error: "Draft attachments exceed the allowed count or outgoing size limit" }, { status: 400 });
+	if (existing.length + files.length + inlineFiles.length > MAX_ATTACHMENT_COUNT || [...files, ...inlineFiles].some((file) => file.size > maxBytes) || existing.reduce((total, file) => total + file.size, 0) + [...files, ...inlineFiles].reduce((total, file) => total + file.size, 0) > maxBytes) return Response.json({ error: "Draft attachments exceed the allowed count or outgoing size limit" }, { status: 400 });
 	try {
-		const attachments = await storeMessageAttachments(env, id, await Promise.all(files.map(async (file) => ({ filename: file.name, type: file.type || "application/octet-stream", content: await file.arrayBuffer(), disposition: "attachment" as const }))));
+		const regular = await Promise.all(files.map(async (file) => ({ filename: file.name, type: file.type || "application/octet-stream", content: await file.arrayBuffer(), disposition: "attachment" as const })));
+		const inline = await Promise.all(inlineFiles.map(async (file) => ({ filename: file.name, type: file.type || "application/octet-stream", content: await file.arrayBuffer(), disposition: "inline" as const, contentId: crypto.randomUUID() })));
+		const attachments = await storeMessageAttachments(env, id, [...regular, ...inline]);
 		await db.update(agentDraftMetadata).set({ revision: sql`${agentDraftMetadata.revision} + 1`, humanEditedAt: new Date() }).where(eq(agentDraftMetadata.draftId, id));
 		return Response.json({ attachments });
 	} catch (error) {

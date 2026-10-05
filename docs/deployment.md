@@ -84,6 +84,14 @@ npm run db:migrate:remote
 
 Remote migrations require the target account's `database_id` in your local `wrangler.jsonc`. Do not commit an account-specific database ID to a reusable repository.
 
+## Preview branches
+
+Non-production branch builds run `wrangler preview`, which requires a `previews` block in `wrangler.jsonc`. Previews do not inherit top-level bindings, so the block re-declares each binding against preview-safe resources. Create dedicated preview resources once per account (`wrangler d1 create`, `wrangler r2 bucket create`, `wrangler queues create`), then fill in their names and IDs in the `previews` block. Pointing previews at production resources makes branch builds share your live mailbox data and lets preview-produced queue messages be consumed by production.
+
+Each preview gets an isolated Durable Object namespace automatically, and the preview database is migrated during first-run setup. Queue consumers, cron triggers, and routes never target previews: preview queue messages stay queued, and scheduled work must be triggered manually. See the [Worker Previews configuration docs](https://developers.cloudflare.com/workers/previews/configuration/) for details.
+
+Secrets are not inherited from production. Set shared secrets once on the Previews Base configuration with `wrangler preview base-config secret put NAME`, and every preview created afterwards receives them. Secrets already existing on a preview are unchanged by later base-config edits, so set them per preview with `wrangler preview secret put NAME --name <preview>` when needed. Keep deploy-triggering secrets (for example `GITHUB_UPDATE_TOKEN`) out of previews so branch builds cannot dispatch production updates.
+
 ## Database backups
 
 Mailflare exports its D1 records as JSON and stores the backup files in the configured R2 bucket. A cron trigger in `wrangler.jsonc` runs daily at 02:00 UTC and applies the schedule selected under **Admin → Backups**. Manual backups run the same record export directly from the admin API.

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ClipboardEvent, KeyboardEvent } from "react";
+import type { ClipboardEvent, DragEvent, KeyboardEvent } from "react";
 import {
 	Bold,
+	ImagePlus,
 	Italic,
 	Link2,
 	List,
@@ -14,7 +15,9 @@ import {
 	Underline,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
+import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
 import { cn } from "@/lib/utils";
+import { escapeHtml, hasMeaningfulHtml } from "./rich-text-utils";
 import type { RichTextEditorProps, ToolbarCommand } from "./rich-text-editor-types";
 
 const COMMANDS: ToolbarCommand[] = [
@@ -29,8 +32,9 @@ const COMMANDS: ToolbarCommand[] = [
 
 /**
  * A small HTML editor built on contentEditable. It stays deliberately light:
- * inline styles, lists, quotes and links, with pasted content flattened to
- * text so a message never carries another site's markup.
+ * inline styles, lists, quotes and links. Pasted content is sanitized to safe
+ * markup (or flattened to text when nothing meaningful survives), and pasted
+ * images are embedded through the compose attachment pipeline.
  */
 export function RichTextEditor({
 	id,
@@ -43,8 +47,10 @@ export function RichTextEditor({
 	toolbarStart,
 	toolbarEnd,
 	footerContent,
+	onEmbedImages,
 }: RichTextEditorProps) {
 	const editorRef = useRef<HTMLDivElement | null>(null);
+	const imageInput = useRef<HTMLInputElement | null>(null);
 	const [active, setActive] = useState<Record<string, boolean>>({});
 	const [linkOpen, setLinkOpen] = useState(false);
 	const [linkUrl, setLinkUrl] = useState("");
@@ -115,10 +121,74 @@ export function RichTextEditor({
 		emit();
 	}
 
+	function embedFiles(files: File[], range?: Range | null) {
+		if (!onEmbedImages || !files.length) return;
+		const selection = window.getSelection();
+		const restore = range ?? (selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null);
+		void (async () => {
+			const images = await onEmbedImages(files);
+			const element = editorRef.current;
+			if (!element) return;
+			element.focus();
+			const current = window.getSelection();
+			if (restore && current && element.contains(restore.commonAncestorContainer)) {
+				current.removeAllRanges();
+				current.addRange(restore);
+			}
+			for (const image of images) {
+				if (!image) continue;
+				const alt = image.alt ? escapeHtml(image.alt) : "";
+				const src = image.src.replace(/"/g, "&quot;");
+				document.execCommand("insertHTML", false, `<img src="${src}" alt="${alt}">`);
+			}
+			emit();
+		})();
+	}
+
 	function onPaste(event: ClipboardEvent<HTMLDivElement>) {
+		const imageFiles = Array.from(event.clipboardData?.items ?? [])
+			.filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+			.map((item) => item.getAsFile())
+			.filter((file): file is File => file !== null);
+		if (imageFiles.length > 0 && onEmbedImages) {
+			event.preventDefault();
+			embedFiles(imageFiles);
+			return;
+		}
 		event.preventDefault();
+		const pastedHtml = event.clipboardData.getData("text/html");
+		if (pastedHtml) {
+			const sanitized = sanitizeEmailHtml(pastedHtml, { forOutgoing: true });
+			if (sanitized && hasMeaningfulHtml(sanitized)) {
+				document.execCommand("insertHTML", false, sanitized);
+				emit();
+				return;
+			}
+		}
 		const text = event.clipboardData.getData("text/plain");
 		document.execCommand("insertText", false, text);
+	}
+
+	function caretRangeAt(x: number, y: number): Range | null {
+		const doc = document as Document & {
+			caretRangeFromPoint?: (x: number, y: number) => Range | null;
+			caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+		};
+		if (doc.caretRangeFromPoint) return doc.caretRangeFromPoint(x, y);
+		const position = doc.caretPositionFromPoint?.(x, y);
+		if (!position) return null;
+		const range = document.createRange();
+		range.setStart(position.offsetNode, position.offset);
+		return range;
+	}
+
+	function onDrop(event: DragEvent<HTMLDivElement>) {
+		const files = Array.from(event.dataTransfer?.files ?? []);
+		if (!files.length || !files.every((file) => file.type.startsWith("image/")) || !onEmbedImages) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const range = caretRangeAt(event.clientX, event.clientY);
+		embedFiles(files, range && editorRef.current?.contains(range.commonAncestorContainer) ? range : null);
 	}
 
 	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -129,7 +199,7 @@ export function RichTextEditor({
 	}
 
 	return (
-		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+		<div className={cn("flex min-h-0 flex-1 flex-col", className)} data-compose-editor="true">
 			<div className="relative min-h-0 flex-1 overflow-y-auto">
 				<div
 					ref={editorRef}
@@ -143,6 +213,7 @@ export function RichTextEditor({
 					onInput={emit}
 					onBlur={emit}
 					onPaste={onPaste}
+					onDrop={onDrop}
 					onKeyDown={onKeyDown}
 					className={cn(
 						"email-body max-w-none px-4 py-3 text-sm text-neutral-900 outline-none",
@@ -203,6 +274,20 @@ export function RichTextEditor({
 						<Link2 className="h-4 w-4" />
 					</button>
 				</Tooltip>
+				{onEmbedImages && (
+					<Tooltip label="Insert image">
+						<button
+							type="button"
+							aria-label="Insert image"
+							disabled={disabled}
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => imageInput.current?.click()}
+							className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+						>
+							<ImagePlus className="h-4 w-4" />
+						</button>
+					</Tooltip>
+				)}
 				<Tooltip label="Clear formatting">
 					<button
 						type="button"
@@ -216,6 +301,20 @@ export function RichTextEditor({
 					</button>
 				</Tooltip>
 				{toolbarEnd}
+				{onEmbedImages && (
+					<input
+						ref={imageInput}
+						type="file"
+						accept="image/*"
+						multiple
+						className="hidden"
+						onChange={(event) => {
+							const files = Array.from(event.target.files ?? []);
+							if (files.length) embedFiles(files);
+							event.target.value = "";
+						}}
+					/>
+				)}
 				{linkOpen && (
 					<form
 						className="absolute bottom-full left-2 z-10 mb-1 flex items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg"

@@ -26,6 +26,8 @@ export function buildSendFormData(input: {
 	/** Draft whose stored attachments should be sent with the message. */
 	draftId?: string | null;
 	scheduledAt?: Date | null;
+	/** Embedded body images that were never uploaded to a draft; sent as inline attachments with their cid. */
+	inlineImages?: Array<{ file: File; contentId: string }>;
 }): FormData {
 	const form = new FormData();
 	form.set("from", input.from);
@@ -43,6 +45,10 @@ export function buildSendFormData(input: {
 	if (input.scheduledAt) form.set("scheduledAt", input.scheduledAt.toISOString());
 	for (const attachment of input.attachments) {
 		form.append("attachments", attachment.file);
+	}
+	for (const image of input.inlineImages ?? []) {
+		form.append("inlineAttachments", image.file);
+		form.append("inlineContentIds", image.contentId);
 	}
 	return form;
 }

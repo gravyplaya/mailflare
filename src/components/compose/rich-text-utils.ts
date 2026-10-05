@@ -105,6 +105,10 @@ function renderNode(node: Node, state: RenderState): string {
 	const element = node as HTMLElement;
 	const tag = element.tagName.toLowerCase();
 	if (tag === "br") return "\n";
+	if (tag === "img") {
+		const alt = element.getAttribute("alt")?.trim();
+		return alt ? ` [image: ${alt}] ` : " [image] ";
+	}
 	if (tag === "style" || tag === "script" || tag === "head") return "";
 
 	if (tag === "ul" || tag === "ol") {

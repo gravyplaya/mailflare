@@ -21,6 +21,16 @@ export async function prepareCloudflareAttachments(
 	for (const attachment of attachments) {
 		const size = attachment.content.byteLength;
 		const encodedSize = Math.ceil(size / 3) * 4 + 2048;
+		// Inline images render inside the body, so a download link would replace
+		// the picture with text; they must fit the message or sending fails.
+		if (attachment.disposition === "inline") {
+			if (estimatedSize + encodedSize > GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) {
+				throw new Error(`${attachment.filename} is too large to embed; remove it or attach it as a file instead`);
+			}
+			direct.push(attachment);
+			estimatedSize += encodedSize;
+			continue;
+		}
 		if (size <= CLOUD_ATTACHMENT_THRESHOLD_BYTES && estimatedSize + encodedSize <= GENERAL_MESSAGE_LIMIT_BYTES - MIME_SAFETY_MARGIN_BYTES) {
 			direct.push(attachment);
 			estimatedSize += encodedSize;

@@ -25,6 +25,19 @@ export async function parseSendRequest(request: Request): Promise<SendRequestPay
 			disposition: "attachment",
 		});
 	}
+	const inlineFiles = form.getAll("inlineAttachments");
+	const inlineContentIds = form.getAll("inlineContentIds");
+	for (const [index, value] of inlineFiles.entries()) {
+		if (!(value instanceof File) || value.size === 0) continue;
+		const contentId = inlineContentIds[index];
+		attachments.push({
+			filename: value.name,
+			type: value.type || "application/octet-stream",
+			content: await value.arrayBuffer(),
+			disposition: "inline",
+			contentId: typeof contentId === "string" && contentId ? contentId : null,
+		});
+	}
 
 	return {
 		from: String(form.get("from") ?? ""),

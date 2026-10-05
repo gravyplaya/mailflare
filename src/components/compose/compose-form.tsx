@@ -28,10 +28,25 @@ import {
 	textToHtml,
 } from "./rich-text-utils";
 import { headerToRecipients, isValidRecipient, recipientsToHeader } from "./recipient-utils";
+import {
+	draftAttachmentUrl,
+	isImageFile,
+	maybeDownscaleImage,
+	resolveInlineImageSources,
+	rewriteInlineImageSources,
+	stripDeadInlineImages,
+} from "./image-utils";
 import type { ComposeAttachment, ComposeStoredAttachment, ComposeThreading } from "./types";
 import type { ComposeAttachmentPolicy } from "./attachment-policy-types";
 
 type Toast = { type: "success" | "error"; message: string } | null;
+
+type InlineImageState = {
+	file: File;
+	src: string;
+	attachmentId: string | null;
+	contentId: string | null;
+};
 
 export function ComposeForm({
 	mode = "page",
@@ -60,6 +75,8 @@ export function ComposeForm({
 	const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
 	// Attachments the draft already holds server-side (a forwarded message's files).
 	const [storedAttachments, setStoredAttachments] = useState<ComposeStoredAttachment[]>([]);
+	// Inline attachments the body or quoted HTML references by cid.
+	const [inlineStoredAttachments, setInlineStoredAttachments] = useState<Array<ComposeStoredAttachment & { contentId: string }>>([]);
 	const [attachmentPolicy, setAttachmentPolicy] = useState<ComposeAttachmentPolicy>({ maxMb: 25, cloudThresholdBytes: 3_000_000 });
 	const [draggingFiles, setDraggingFiles] = useState(false);
 	const [modalMode, setModalMode] = useState(false);
@@ -77,6 +94,9 @@ export function ComposeForm({
 	const attachmentInput = useRef<HTMLInputElement | null>(null);
 	const fileDragDepth = useRef(0);
 	const previousSignature = useRef("");
+	// Embedded body images. Kept in a ref because they render inside the HTML,
+	// not as tray chips; the ref avoids re-render churn during uploads.
+	const inlineImages = useRef<InlineImageState[]>([]);
 
 	useEffect(() => {
 		if (!selectedMailbox && mailboxes.length === 1) setSelectedMailbox(mailboxes[0]);
@@ -153,9 +173,19 @@ export function ComposeForm({
 				);
 				setSubject(draft.subject ?? "");
 				const stored = splitQuotedHtml(draft.htmlBody || textToHtml(draft.textBody));
-				setHtml(stored.body);
-				setQuotedHtml(stored.quoted);
-				setStoredAttachments(draft.attachments?.filter((item) => item.disposition === "attachment") ?? []);
+				const allAttachments = draft.attachments ?? [];
+				const inlineStored = allAttachments.filter(
+					(item): item is ComposeStoredAttachment & { contentId: string } =>
+						item.disposition === "inline" && !!item.contentId,
+				);
+				const inlineSources = inlineStored.map((item) => ({
+					src: draftAttachmentUrl(draft.id, item.id),
+					contentId: item.contentId,
+				}));
+				setInlineStoredAttachments(inlineStored);
+				setHtml(stripDeadInlineImages(resolveInlineImageSources(stored.body, inlineSources)));
+				setQuotedHtml(stored.quoted ? resolveInlineImageSources(stored.quoted, inlineSources) : null);
+				setStoredAttachments(allAttachments.filter((item) => item.disposition === "attachment"));
 				setLoadedDraftMailboxId(draft.mailboxId);
 				setLoadedDraftFrom(getEmailAddress(draft.fromAddr).toLowerCase());
 			})
@@ -252,7 +282,38 @@ export function ComposeForm({
 			return;
 		}
 		setLoading(true);
-		const fullHtml = joinQuotedHtml(html, quotedHtml);
+		let fullHtml = joinQuotedHtml(html, quotedHtml);
+		const unattachedInline: Array<{ file: File; contentId: string }> = [];
+		if (draftId) {
+			try {
+				fullHtml = await flushInlineImages(draftId);
+			} catch (cause) {
+				setLoading(false);
+				setToast({ type: "error", message: cause instanceof Error ? cause.message : "Could not embed image" });
+				return;
+			}
+			await pruneInlineImages(fullHtml, draftId);
+			// Point stored body images at their cid: references; the draft keeps its
+			// fetchable URLs while the outgoing message needs cid parts. Sources that
+			// were pruned are no longer in the HTML, so stale entries rewrite nothing.
+			fullHtml = rewriteInlineImageSources(fullHtml, [
+				...inlineImages.current
+					.filter((image) => image.attachmentId && image.contentId)
+					.map((image) => ({ src: image.src, contentId: image.contentId })),
+				...inlineStoredAttachments.map((item) => ({
+					src: draftAttachmentUrl(draftId, item.id),
+					contentId: item.contentId,
+				})),
+			]);
+		} else {
+			// No draft landed yet (sent within the autosave window); send the
+			// images along as inline attachments with client-assigned cids.
+			for (const image of inlineImages.current.filter((item) => !item.attachmentId && fullHtml.includes(item.src))) {
+				const contentId = crypto.randomUUID();
+				fullHtml = fullHtml.replaceAll(`src="${image.src}"`, `src="cid:${contentId}"`);
+				unattachedInline.push({ file: image.file, contentId });
+			}
+		}
 		if (draftId && agentRevision !== null) {
 			try {
 				if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -282,6 +343,7 @@ export function ComposeForm({
 			method: "POST",
 			body: buildSendFormData({
 				attachments,
+				inlineImages: unattachedInline,
 				from: fromAddr,
 				to: recipientsToHeader(to),
 				cc: recipientsToHeader(cc),
@@ -316,6 +378,8 @@ export function ComposeForm({
 		setShowBcc(false);
 		setThreading(null);
 		setStoredAttachments([]);
+		setInlineStoredAttachments([]);
+		resetInlineImages();
 		setSubject("");
 		setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
 		setQuotedHtml(null);
@@ -347,6 +411,8 @@ export function ComposeForm({
 		setShowBcc(false);
 		setThreading(null);
 		setStoredAttachments([]);
+		setInlineStoredAttachments([]);
+		resetInlineImages();
 		setSubject("");
 		setHtml(applyMailboxSignatureHtml("", "", selectedMailbox?.signature));
 		setQuotedHtml(null);
@@ -371,6 +437,123 @@ export function ComposeForm({
 		}
 		setStoredAttachments((current) => current.filter((item) => item.id !== attachmentId));
 	}
+
+	async function uploadInlineImages(id: string, files: File[]): Promise<Array<{ id: string; contentId: string | null }>> {
+		const form = new FormData();
+		for (const file of files) form.append("inlineAttachments", file);
+		const res = await authFetch(`/api/drafts/${id}/attachments`, { method: "POST", body: form });
+		const result = (await res.json()) as { attachments?: Array<{ id: string; contentId: string | null }>; error?: string };
+		if (!res.ok || !result.attachments) throw new Error(result.error || "Could not embed image");
+		return result.attachments;
+	}
+
+	function resetInlineImages() {
+		for (const image of inlineImages.current) {
+			if (image.src.startsWith("blob:")) URL.revokeObjectURL(image.src);
+		}
+		inlineImages.current = [];
+	}
+
+	/** Drop embedded images the user removed from the body so they are not sent along as orphans. */
+	async function pruneInlineImages(currentHtml: string, id: string): Promise<void> {
+		const kept: InlineImageState[] = [];
+		for (const image of inlineImages.current) {
+			if (currentHtml.includes(image.src)) {
+				kept.push(image);
+				continue;
+			}
+			if (image.attachmentId) {
+				await authFetch(`/api/drafts/${id}/attachments/${image.attachmentId}`, { method: "DELETE" }).catch(() => {});
+			} else {
+				URL.revokeObjectURL(image.src);
+			}
+		}
+		inlineImages.current = kept;
+		const keptStored: Array<ComposeStoredAttachment & { contentId: string }> = [];
+		for (const item of inlineStoredAttachments) {
+			if (currentHtml.includes(draftAttachmentUrl(id, item.id))) {
+				keptStored.push(item);
+				continue;
+			}
+			await authFetch(`/api/drafts/${id}/attachments/${item.id}`, { method: "DELETE" }).catch(() => {});
+		}
+		setInlineStoredAttachments(keptStored);
+	}
+
+	/** Upload blob-backed images to the draft and point the body at their stored URLs. Returns the rewritten body HTML. */
+	async function flushInlineImages(id: string): Promise<string> {
+		const pending = inlineImages.current.filter((image) => !image.attachmentId);
+		if (!pending.length) return html;
+		const stored = await uploadInlineImages(id, pending.map((image) => image.file));
+		inlineImages.current = inlineImages.current.map((image) => {
+			const index = pending.findIndex((item) => item.src === image.src);
+			const item = stored[index];
+			return index >= 0 && item
+				? { ...image, src: draftAttachmentUrl(id, item.id), attachmentId: item.id, contentId: item.contentId }
+				: image;
+		});
+		const rewritten = pending.reduce(
+			(current, image, index) => {
+				const item = stored[index];
+				return item ? current.replaceAll(`src="${image.src}"`, `src="${draftAttachmentUrl(id, item.id)}"`) : current;
+			},
+			html,
+		);
+		setHtml(rewritten);
+		return rewritten;
+	}
+
+	async function embedImages(files: File[]): Promise<Array<{ src: string; alt?: string } | null>> {
+		if (loading || loadingDraft) return files.map(() => null);
+		const processed = await Promise.all(files.map(maybeDownscaleImage));
+		const inline = inlineImages.current;
+		const nextCount = storedAttachments.length + attachments.length + inline.length + processed.length;
+		const totalSize =
+			storedAttachments.reduce((total, item) => total + item.size, 0) +
+			[...attachments.map((attachment) => attachment.file), ...inline.map((image) => image.file), ...processed].reduce(
+				(total, file) => total + file.size,
+				0,
+			);
+		const reject = (message: string) => {
+			setToast({ type: "error", message });
+			return processed.map(() => null);
+		};
+		if (nextCount > 10) return reject("A message can include at most 10 attachments");
+		if (processed.some((file) => file.size > attachmentPolicy.maxMb * 1_000_000)) {
+			return reject(`Each attachment must be ${attachmentPolicy.maxMb} MB or smaller`);
+		}
+		if (totalSize > attachmentPolicy.maxMb * 1_000_000) {
+			return reject(`Attachments must total ${attachmentPolicy.maxMb} MB or less`);
+		}
+		if (draftId) {
+			try {
+				const stored = await uploadInlineImages(draftId, processed);
+				return processed.map((file, index) => {
+					const item = stored[index];
+					if (!item) return null;
+					const src = draftAttachmentUrl(draftId, item.id);
+					inlineImages.current.push({ file, src, attachmentId: item.id, contentId: item.contentId });
+					return { src, alt: file.name };
+				});
+			} catch (cause) {
+				return reject(cause instanceof Error ? cause.message : "Could not embed image");
+			}
+		}
+		return processed.map((file) => {
+			const src = URL.createObjectURL(file);
+			inlineImages.current.push({ file, src, attachmentId: null, contentId: null });
+			return { src, alt: file.name };
+		});
+	}
+
+	useEffect(() => {
+		if (!draftId) return;
+		void flushInlineImages(draftId).catch((cause) => {
+			setToast({ type: "error", message: cause instanceof Error ? cause.message : "Could not embed image" });
+		});
+		// flushInlineImages reads the current body HTML from state; draftId is the trigger.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [draftId]);
 
 	function addAttachments(files: FileList | null) {
 		if (!files) return;
@@ -426,7 +609,12 @@ export function ComposeForm({
 		event.preventDefault();
 		fileDragDepth.current = 0;
 		setDraggingFiles(false);
-		if (!loading && !loadingDraft) addAttachments(event.dataTransfer.files);
+		if (loading || loadingDraft) return;
+		const files = Array.from(event.dataTransfer.files);
+		// A drop of only images inside the body embeds them; anywhere else attaches.
+		const overEditor = event.target instanceof Element && event.target.closest("[data-compose-editor]");
+		if (overEditor && files.length > 0 && files.every(isImageFile)) return;
+		addAttachments(event.dataTransfer.files);
 	}
 
 	function selectSender(value: string) {
@@ -629,6 +817,7 @@ export function ComposeForm({
 					disabled={loadingDraft}
 					placeholder="Write your message"
 					footerContent={attachmentContent}
+					onEmbedImages={embedImages}
 					toolbarStart={
 						<>
 							<div className="flex items-center">
