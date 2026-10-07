@@ -24,6 +24,8 @@ export const users = sqliteTable("users", {
 	keyboardShortcutsEnabled: integer("keyboard_shortcuts_enabled", { mode: "boolean" }).notNull().default(true),
 	spamProtectionEnabled: integer("spam_protection_enabled", { mode: "boolean" }).notNull().default(true),
 	aiSpamProtectionEnabled: integer("ai_spam_protection_enabled", { mode: "boolean" }).notNull().default(true),
+	// Gatekeeper holds mail from senders that have not been approved yet.
+	gatekeeperEnabled: integer("gatekeeper_enabled", { mode: "boolean" }).notNull().default(false),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
 	showFullRecipientAddresses: integer("show_full_recipient_addresses", { mode: "boolean" }).notNull().default(false),
 	// TOTP second factor. The secret is written at enrolment and only counts
@@ -167,6 +169,11 @@ export const contacts = sqliteTable(
 			.notNull()
 			.default("inbound"),
 		blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+		// Priority senders are highlighted and pinned atop the inbox, and they
+		// always bypass the Gatekeeper queue.
+		priority: integer("priority", { mode: "boolean" }).notNull().default(false),
+		// Set once the user has accepted the sender through the Gatekeeper.
+		approved: integer("approved", { mode: "boolean" }).notNull().default(false),
 		lastSeenAt: integer("last_seen_at", { mode: "timestamp" }),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
@@ -247,6 +254,7 @@ export const messages = sqliteTable(
 		read: integer("read", { mode: "boolean" }).notNull().default(false),
 		starred: integer("starred", { mode: "boolean" }).notNull().default(false),
 		snoozedUntil: integer("snoozed_until", { mode: "timestamp" }),
+		done: integer("done", { mode: "boolean" }).notNull().default(false),
 		threadId: text("thread_id"),
 		// RFC 5322 threading headers, kept so replies land in the right conversation
 		// and so outgoing replies can carry them on to the recipient's client.
@@ -283,6 +291,58 @@ export const messages = sqliteTable(
 			t.createdAt,
 		),
 		index("messages_mailbox_thread_key_idx").on(t.mailboxId, sql`coalesce(${t.threadId}, ${t.id})`),
+	],
+);
+
+export const mutedThreads = sqliteTable(
+	"muted_threads",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		mailboxId: text("mailbox_id")
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: "cascade" }),
+		threadId: text("thread_id").notNull(),
+		// When set, new mail in a muted thread is also moved straight to the archive.
+		autoArchive: integer("auto_archive", { mode: "boolean" }).notNull().default(false),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("muted_threads_mailbox_thread_idx").on(t.mailboxId, t.threadId),
+		index("muted_threads_user_idx").on(t.userId),
+	],
+);
+
+export const followUps = sqliteTable(
+	"follow_ups",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		mailboxId: text("mailbox_id")
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: "cascade" }),
+		messageId: text("message_id")
+			.notNull()
+			.references(() => messages.id, { onDelete: "cascade" }),
+		dueAt: integer("due_at", { mode: "timestamp" }).notNull(),
+		// pending → replied (a reply landed) | triggered (due, no reply) | cancelled
+		status: text("status", { enum: ["pending", "replied", "triggered", "cancelled"] })
+			.notNull()
+			.default("pending"),
+		triggeredAt: integer("triggered_at", { mode: "timestamp" }),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		index("follow_ups_user_status_idx").on(t.userId, t.status),
+		index("follow_ups_message_idx").on(t.messageId),
 	],
 );
 

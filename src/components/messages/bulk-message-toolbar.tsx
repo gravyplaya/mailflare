@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Mail, MailOpen, ShieldAlert, Trash2, X } from "lucide-react";
+import { Archive, CheckCircle2, Mail, MailOpen, ShieldAlert, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -25,6 +25,11 @@ export function BulkMessageToolbar({
 			<Tooltip label="Archive">
 				<Button variant="ghost" size="sm" onClick={() => onAction("archive")} disabled={pending} aria-label="Archive">
 					<Archive className="h-4 w-4" />
+				</Button>
+			</Tooltip>
+			<Tooltip label="Mark as done (archive as completed)">
+				<Button variant="ghost" size="sm" onClick={() => onAction("done")} disabled={pending} aria-label="Mark as done">
+					<CheckCircle2 className="h-4 w-4" />
 				</Button>
 			</Tooltip>
 			<Tooltip label="Report spam">

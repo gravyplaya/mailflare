@@ -1,4 +1,4 @@
-import type { NewMessageEvent } from "./message-realtime-types";
+import type { FollowUpDueEvent, NewMessageEvent, RealtimeNotificationEvent } from "./message-realtime-types";
 
 export const REALTIME_FALLBACK_INTERVAL_MS = 60_000;
 export const REALTIME_HEARTBEAT_INTERVAL_MS = 25_000;
@@ -26,9 +26,30 @@ export function getReconnectDelay(attempt: number): number {
 	return Math.min(1_000 * 2 ** attempt, REALTIME_RECONNECT_MAX_MS);
 }
 
-export function parseNewMessageEvent(value: string): NewMessageEvent | null {
+type RawNotificationPayload = {
+	type?: unknown;
+	messageId?: unknown;
+	mailboxId?: unknown;
+	from?: unknown;
+	fromName?: unknown;
+	subject?: unknown;
+};
+
+export function parseNewMessageEvent(value: string): RealtimeNotificationEvent | null {
 	try {
-		const payload = JSON.parse(value) as Partial<NewMessageEvent>;
+		const payload = JSON.parse(value) as RawNotificationPayload;
+		if (
+			payload.type === "follow_up_due" &&
+			typeof payload.messageId === "string" &&
+			typeof payload.mailboxId === "string"
+		) {
+			return {
+				type: "follow_up_due",
+				messageId: payload.messageId,
+				mailboxId: payload.mailboxId,
+				subject: typeof payload.subject === "string" ? payload.subject : null,
+			};
+		}
 		if (
 			payload.type !== "new_message" ||
 			typeof payload.messageId !== "string" ||
@@ -51,7 +72,7 @@ export function parseNewMessageEvent(value: string): NewMessageEvent | null {
 	}
 }
 
-export function showBrowserNewMessageNotification(event: NewMessageEvent): void {
+export function showBrowserNewMessageNotification(event: RealtimeNotificationEvent): void {
 	if (
 		typeof Notification === "undefined" ||
 		Notification.permission !== "granted" ||
@@ -62,6 +83,19 @@ export function showBrowserNewMessageNotification(event: NewMessageEvent): void 
 	}
 
 	try {
+		if (event.type === "follow_up_due") {
+			const notification = new Notification("Follow-up due", {
+				body: `No reply yet: ${event.subject || "(no subject)"}`,
+				icon: "/icon-96.png",
+				tag: event.messageId,
+			});
+			notification.onclick = () => {
+				window.focus();
+				window.location.assign("/follow-ups");
+				notification.close();
+			};
+			return;
+		}
 		const notification = new Notification(event.subject || "New email", {
 			body: `From ${event.fromName ?? event.from}`,
 			icon: "/icon-96.png",

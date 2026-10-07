@@ -121,12 +121,14 @@ export function getMessageActionRedirect(
   action: BulkMessageAction,
   direction: "inbound" | "outbound",
 ) {
-  // Deleting from the message view returns to the inbox, not the trash view.
-  if (action === "trash") return "/inbox";
-  if (action === "spam") return "/spam";
-  if (action === "archive") return "/archived";
-  if (action === "inbox") return "/inbox";
-  return null;
+	// Toolbar actions on an open message return to the inbox, not the folder
+	// the message ended up in.
+	if (action === "trash") return "/inbox";
+	if (action === "spam") return "/inbox";
+	if (action === "archive") return "/inbox";
+	if (action === "done") return "/inbox";
+	if (action === "inbox") return "/inbox";
+	return null;
 }
 
 export function buildReplySubject(subject: string | null | undefined) {

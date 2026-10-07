@@ -7,10 +7,11 @@ import { parseSendRequest } from "./utils";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { getSendErrorStatus } from "./error-utils";
 import { getDb } from "@/db";
-import { agentDraftMetadata, messages } from "@/db/schema";
+import { agentDraftMetadata, followUps, messages } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { userOwnsDraft } from "@/app/api/drafts/utils";
+import { newId } from "@/lib/ids";
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
 		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
 		return NextResponse.json({ error: "Invalid send request" }, { status });
 	}
-	const { attachments = [], draftId, ...fields } = input;
+	const { attachments = [], draftId, followUpAt: followUpAtRaw, ...fields } = input;
 	const parsed = sendEmailSchema.omit({ attachments: true }).safeParse(fields);
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -48,6 +49,19 @@ export async function POST(request: Request) {
 			attachments,
 			publicOrigin: new URL(request.url).origin,
 		});
+
+		// Follow-up reminder: fire unless a reply lands in the thread by dueAt.
+		const followUpAt = followUpAtRaw ? new Date(followUpAtRaw) : null;
+		if (followUpAt && followUpAt.getTime() > Date.now() && parsed.data.mailboxId) {
+			await getDb(env).insert(followUps).values({
+				id: newId("fup"),
+				userId: user.id,
+				mailboxId: parsed.data.mailboxId,
+				messageId: result.messageId,
+				dueAt: followUpAt,
+			}).onConflictDoNothing();
+		}
+
 		return NextResponse.json(result);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Send failed";

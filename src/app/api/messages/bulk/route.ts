@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 			return NextResponse.json({ error: "Folder not found" }, { status: 404 });
 		}
 		folderId = folder.id;
-	} else if (payload.action === "spam" || payload.action === "trash" || payload.action === "inbox" || payload.action === "archive") {
+	} else if (payload.action === "spam" || payload.action === "trash" || payload.action === "inbox" || payload.action === "archive" || payload.action === "done") {
 		folderId = null;
 	}
 
@@ -57,6 +57,9 @@ export async function POST(request: Request) {
 		...(status ? { status } : {}),
 		...(read !== null ? { read } : {}),
 		...(folderId !== undefined ? { folderId } : {}),
+		// "done" marks the message completed; moving back to the inbox clears it.
+		...(payload.action === "done" ? { done: true } : {}),
+		...(payload.action === "inbox" ? { done: false } : {}),
 	};
 
 	if (Object.keys(values).length === 0) {

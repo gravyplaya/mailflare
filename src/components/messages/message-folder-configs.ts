@@ -1,4 +1,4 @@
-import { Archive, Clock, MailOpen, Send, ShieldAlert, Star, Trash2 } from "lucide-react";
+import { Archive, CheckCircle2, Clock, MailOpen, Send, ShieldAlert, Star, Trash2 } from "lucide-react";
 import type { MessageFolderConfig } from "./types";
 
 export const inboxFolderConfig: MessageFolderConfig = {
@@ -45,6 +45,15 @@ export const archivedFolderConfig: MessageFolderConfig = {
 	emptyText: "No archived emails",
 	hrefPrefix: "/archived",
 	icon: Archive,
+	badgeVariant: "outline",
+};
+
+export const doneFolderConfig: MessageFolderConfig = {
+	folder: "done",
+	title: "Done",
+	emptyText: "No completed emails",
+	hrefPrefix: "/done",
+	icon: CheckCircle2,
 	badgeVariant: "outline",
 };
 

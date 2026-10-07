@@ -100,8 +100,7 @@ export async function getMessageContactNames(
 	};
 }
 
-export async function blockContact(env: CloudflareEnv, input: BlockContactInput) {
-	const email = normalizeEmailAddress(input.address);
+export async function blockContact(env: CloudflareEnv, input: BlockContactInput) {	const email = normalizeEmailAddress(input.address);
 	if (!email) throw new Error("Contact email is required");
 
 	const db = getDb(env);
@@ -158,6 +157,64 @@ export async function blockContact(env: CloudflareEnv, input: BlockContactInput)
 	}
 
 	return { email, blocked: true };
+}
+
+export async function setContactApproval(env: CloudflareEnv, input: { userId: string; address: string; approved: boolean }) {
+	const email = normalizeEmailAddress(input.address);
+	if (!email) throw new Error("Contact email is required");
+
+	const db = getDb(env);
+	const [existing] = await db
+		.select()
+		.from(contacts)
+		.where(and(eq(contacts.userId, input.userId), eq(contacts.email, email)))
+		.limit(1);
+	if (existing) {
+		await db.update(contacts).set({ approved: input.approved }).where(eq(contacts.id, existing.id));
+		return { ...existing, approved: input.approved };
+	}
+
+	const id = getContactId(input.userId, email);
+	await db.insert(contacts).values({
+		id,
+		userId: input.userId,
+		email,
+		displayName: getContactNameFromAddress(input.address),
+		source: "manual",
+		approved: input.approved,
+		lastSeenAt: new Date(),
+	});
+	const [created] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+	return created ?? null;
+}
+
+export async function setContactPriority(env: CloudflareEnv, input: { userId: string; address: string; priority: boolean }) {
+	const email = normalizeEmailAddress(input.address);
+	if (!email) throw new Error("Contact email is required");
+
+	const db = getDb(env);
+	const [existing] = await db
+		.select()
+		.from(contacts)
+		.where(and(eq(contacts.userId, input.userId), eq(contacts.email, email)))
+		.limit(1);
+	if (existing) {
+		await db.update(contacts).set({ priority: input.priority }).where(eq(contacts.id, existing.id));
+		return { ...existing, priority: input.priority };
+	}
+
+	const id = getContactId(input.userId, email);
+	await db.insert(contacts).values({
+		id,
+		userId: input.userId,
+		email,
+		displayName: getContactNameFromAddress(input.address),
+		source: "manual",
+		priority: input.priority,
+		lastSeenAt: new Date(),
+	});
+	const [created] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+	return created ?? null;
 }
 
 function getNextDisplayName(existingName: string | null, source: string, nextName: string | null): string | null {

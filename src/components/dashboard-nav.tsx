@@ -5,6 +5,8 @@ import { Fragment } from "react";
 import { useEffect, useState } from "react";
 import {
   Archive,
+  BellRing,
+  CheckCircle2,
   Clock,
   FileText,
   Folder,
@@ -13,6 +15,7 @@ import {
   Plus,
   Send,
   ShieldAlert,
+  ShieldCheck,
   Star,
   Trash2,
 } from "lucide-react";
@@ -53,6 +56,8 @@ const links = [
   { href: "/inbox", label: "Inbox", icon: Inbox, preloadMessages: true },
   { href: "/starred", label: "Starred", icon: Star, preloadMessages: true },
   { href: "/snoozed", label: "Snoozed", icon: Clock, preloadMessages: true },
+  { href: "/gatekeeper", label: "Gatekeeper", icon: ShieldCheck, preloadMessages: false },
+  { href: "/follow-ups", label: "Follow-ups", icon: BellRing, preloadMessages: false },
   { href: "/sent", label: "Sent", icon: Send, preloadMessages: true },
   { href: "/drafts", label: "Drafts", icon: FileText, preloadMessages: true },
   {
@@ -61,6 +66,7 @@ const links = [
     icon: Archive,
     preloadMessages: true,
   },
+  { href: "/done", label: "Done", icon: CheckCircle2, preloadMessages: true },
   { href: "/spam", label: "Spam", icon: ShieldAlert, preloadMessages: true },
   { href: "/trash", label: "Trash", icon: Trash2, preloadMessages: true },
 ];
@@ -85,6 +91,12 @@ export function DashboardNav({ className }: { className?: string }) {
     if (link.href === "/snoozed") {
       return { ...link, count: getFolderNavCount("snoozed", counts.folders) };
     }
+    if (link.href === "/gatekeeper") {
+      return { ...link, count: getFolderNavCount("gatekeeper", counts.folders) };
+    }
+    if (link.href === "/follow-ups") {
+      return { ...link, count: counts.followUps || undefined };
+    }
     if (link.href === "/sent") {
       return { ...link, count: getFolderNavCount("sent", counts.folders) };
     }
@@ -98,6 +110,9 @@ export function DashboardNav({ className }: { className?: string }) {
         onMessageDrop: (messageIds: string[]) =>
           void moveMessagesToSystemFolder(messageIds, "archive"),
       };
+    }
+    if (link.href === "/done") {
+      return { ...link, count: getFolderNavCount("done", counts.folders) };
     }
     if (link.href === "/spam") {
       return {

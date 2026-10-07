@@ -5,7 +5,7 @@ import {
 } from "@/lib/auth/client";
 import type {
 	MessageRealtimeState,
-	NewMessageEvent,
+	RealtimeNotificationEvent,
 	RealtimeChannelMessage,
 } from "./message-realtime-types";
 import {
@@ -18,7 +18,7 @@ import {
 } from "./message-realtime-utils";
 
 export function useMessagePolling(): MessageRealtimeState {
-	const [notification, setNotification] = useState<NewMessageEvent | null>(null);
+	const [notification, setNotification] = useState<RealtimeNotificationEvent | null>(null);
 	const dismissNotification = useCallback(() => setNotification(null), []);
 
 	useEffect(() => {

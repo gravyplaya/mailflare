@@ -27,6 +27,7 @@ Want to support the mailflare? <a target="_blank" href="https://store.paymug.co/
 - **Mailboxes**: Create personal and shared mailboxes with delegated access.
 - **Email**: Send and receive email with attachments, rich formatting, signatures, and automatic replies.
 - **Inbox organization**: Organize mail with search, custom folders, stars, snoozing, archive, spam, and trash.
+- **Focus and triage**: Gatekeeper holds mail from new senders until you accept or block them, mute quiet threads, mark priority senders to pin their mail, mark emails as done, and set follow-up reminders when sending.
 - **Routing rules**: Create routing rules to store, forward, reject, or categorize incoming messages.
 - **Notifications**: Get real-time inbox updates and new-message notifications.
 - **Mail and contacts**: Import and export mail, manage contacts, and block unwanted senders.

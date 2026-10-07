@@ -17,6 +17,7 @@ import {
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
 import { runScheduledDatabaseBackup } from "./src/lib/backups/runner";
+import { runFollowUpMaintenance } from "./src/lib/follow-ups/maintenance";
 import { processAgentDraftJob } from "./src/lib/agent/jobs/utils";
 import { runAgentMaintenance } from "./src/lib/agent/maintenance";
 import { runGmailSync } from "./src/lib/composio/sync";
@@ -128,6 +129,7 @@ export default {
 		if (controller.cron === "*/5 * * * *") {
 			ctx.waitUntil(runGmailSync(env));
 			ctx.waitUntil(runGoogleCalendarSync(env));
+			ctx.waitUntil(runFollowUpMaintenance(env));
 		}
 		ctx.waitUntil(runAgentMaintenance(env));
 	},

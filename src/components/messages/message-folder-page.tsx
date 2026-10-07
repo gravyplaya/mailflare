@@ -369,6 +369,29 @@ export function MessageFolderPage({
 		}
 	}
 
+	function renderMessageRow(message: Message) {
+		return (
+			<MessageListRow
+				key={message.id}
+				message={message}
+				config={config}
+				selected={selectedIds.includes(message.id)}
+				active={message.id === selectedMessageId}
+				compact={compact || isMobile}
+				currentAccountName={currentAccountName}
+				onSelectedChange={updateSelectedMessage}
+				onMessageAction={(messageId, action) =>
+					runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread")
+				}
+				dragMessageIds={expandSelectedIds(selectedIds.includes(message.id) ? selectedIds : [message.id])}
+			/>
+		);
+	}
+
+	const hasPriorityRows = config.folder === "inbox" && messages.some((message) => message.prioritySender);
+	const priorityRows = hasPriorityRows ? messages.filter((message) => message.prioritySender) : [];
+	const otherRows = hasPriorityRows ? messages.filter((message) => !message.prioritySender) : [];
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className={`flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 ${compact ? "px-4" : "px-6"}`}>
@@ -451,22 +474,22 @@ export function MessageFolderPage({
 			</div>
 
 			<div className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto overscroll-contain scrollbar-gutter-stable">
-				{messages.map((message) => (
-					<MessageListRow
-						key={message.id}
-						message={message}
-						config={config}
-						selected={selectedIds.includes(message.id)}
-						active={message.id === selectedMessageId}
-						compact={compact || isMobile}
-						currentAccountName={currentAccountName}
-						onSelectedChange={updateSelectedMessage}
-						onMessageAction={(messageId, action) =>
-							runBulkMessageAction(expandSelectedIds([messageId]), action, action !== "read" && action !== "unread")
-						}
-						dragMessageIds={expandSelectedIds(selectedIds.includes(message.id) ? selectedIds : [message.id])}
-					/>
-				))}
+				{hasPriorityRows ? (
+					<>
+						<p className="sticky top-0 z-10 bg-white/90 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-amber-600 backdrop-blur">
+							Priority
+						</p>
+						{priorityRows.map(renderMessageRow)}
+						{otherRows.length > 0 && (
+							<p className="sticky top-0 z-10 bg-white/90 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 backdrop-blur">
+								Everything else
+							</p>
+						)}
+						{otherRows.map(renderMessageRow)}
+					</>
+				) : (
+					messages.map(renderMessageRow)
+				)}
 				{!isLoading && messages.length === 0 && (
 					<p className="px-6 py-4 text-sm text-neutral-500">
 						{hasActiveFilters ? "No messages match these filters" : config.emptyText}

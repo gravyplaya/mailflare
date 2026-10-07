@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { messages, users } from "@/db/schema";
+import { messages, mutedThreads, users } from "@/db/schema";
 import { newId } from "@/lib/ids";
 import { buildSnippet, parseRawMime } from "@/lib/email/parse";
 import { resolveInboundAddress, resolveInboxRuleDestination } from "@/lib/email/routing";
@@ -102,7 +102,7 @@ export async function processInboundMessage(
 	});
 	let spamAnalysis: Awaited<ReturnType<typeof analyzeSpam>> | null = null;
 	let spamAnalysisError: string | null = null;
-	const [owner] = await db.select({ enabled: users.spamProtectionEnabled, aiEnabled: users.aiSpamProtectionEnabled }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
+	const [owner] = await db.select({ enabled: users.spamProtectionEnabled, aiEnabled: users.aiSpamProtectionEnabled, gatekeeperEnabled: users.gatekeeperEnabled }).from(users).where(eq(users.id, decision.mailbox.userId)).limit(1);
 	if (owner?.enabled !== false) {
 		try {
 			spamAnalysis = await analyzeSpam(db, {
@@ -129,6 +129,7 @@ export async function processInboundMessage(
 	const status = destination.status === "received" && spamAnalysis?.verdict === "spam"
 		? "spam"
 		: destination.status;
+	let effectiveStatus: string = status;
 	const folderId = status === "spam" ? null : destination.folderId;
 	const contact = await upsertContactFromAddress(env, {
 		userId: decision.mailbox.userId,
@@ -153,6 +154,33 @@ export async function processInboundMessage(
 		threadId = normalizeMessageId(parsed.messageId) ?? newId("thr");
 	}
 
+	// Gatekeeper: hold mail from senders the user has not approved yet.
+	// Priority senders and already-approved contacts go straight through.
+	if (
+		effectiveStatus === "received" &&
+		owner?.gatekeeperEnabled &&
+		contact &&
+		!contact.approved &&
+		!contact.priority &&
+		!contact.blocked
+	) {
+		effectiveStatus = "pending";
+	}
+
+	// Muted threads stay quiet: no notification, and optionally straight to the archive.
+	let threadMuted = false;
+	if (effectiveStatus === "received") {
+		const [mutedThread] = await db
+			.select({ autoArchive: mutedThreads.autoArchive })
+			.from(mutedThreads)
+			.where(and(eq(mutedThreads.mailboxId, decision.mailbox.mailboxId), eq(mutedThreads.threadId, threadId)))
+			.limit(1);
+		if (mutedThread) {
+			if (mutedThread.autoArchive) effectiveStatus = "archived";
+			else threadMuted = true;
+		}
+	}
+
 	try {
 		const inserted = await db.insert(messages).values({
 			id: messageId,
@@ -169,7 +197,7 @@ export async function processInboundMessage(
 			textBody: parsed.text,
 			htmlBody: parsed.html,
 			rawR2Key: payload.rawR2Key,
-			status,
+			status: effectiveStatus,
 			threadId,
 			inReplyTo: parsed.inReplyTo,
 			references: parsed.references.length ? parsed.references.join(" ") : null,
@@ -200,7 +228,7 @@ export async function processInboundMessage(
 		throw error;
 	}
 
-	if (status === "received") {
+	if (effectiveStatus === "received") {
 		try {
 			await sendMailboxAutoReply(env, {
 				mailboxId: decision.mailbox.mailboxId,
@@ -215,7 +243,7 @@ export async function processInboundMessage(
 		}
 	}
 
-	if (status !== "spam") {
+	if (effectiveStatus === "received" && !threadMuted) {
 		const notificationUserIds = await getMailboxNotificationUserIds(
 			env,
 			decision.mailbox.mailboxId,
@@ -241,7 +269,7 @@ export async function processInboundMessage(
 		spamVerdict: spamAnalysis?.verdict,
 	});
 	try {
-		await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: decision.mailbox.userId, sender: fromAddr, headers: payload.headers, status, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
+		await scheduleAutoDraft(env, { mailboxId: decision.mailbox.mailboxId, sourceMessageId: messageId, ownerUserId: decision.mailbox.userId, sender: fromAddr, headers: payload.headers, status: effectiveStatus, folderId, spamVerdict: spamAnalysis?.verdict, spamAnalysisError });
 	} catch (error) { console.error("Auto-draft scheduling failed", error); }
 }
 

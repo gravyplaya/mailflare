@@ -7,9 +7,18 @@ export interface NewMessageEvent {
 	type: "new_message";
 }
 
+export interface FollowUpDueEvent {
+	type: "follow_up_due";
+	messageId: string;
+	mailboxId: string;
+	subject: string | null;
+}
+
+export type RealtimeNotificationEvent = NewMessageEvent | FollowUpDueEvent;
+
 export interface MessageRealtimeState {
 	dismissNotification: () => void;
-	notification: NewMessageEvent | null;
+	notification: RealtimeNotificationEvent | null;
 }
 
 export type RealtimeChannelMessage =

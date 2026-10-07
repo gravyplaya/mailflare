@@ -1,6 +1,6 @@
-export type MessageStatus = "received" | "sent" | "draft" | "queued" | "failed" | "archived" | "trash" | "spam";
+export type MessageStatus = "received" | "sent" | "draft" | "queued" | "failed" | "archived" | "trash" | "spam" | "pending";
 
-export type MessageFolder = "inbox" | "starred" | "snoozed" | "sent" | "drafts" | "archived" | "trash" | "spam";
+export type MessageFolder = "inbox" | "starred" | "snoozed" | "sent" | "drafts" | "archived" | "done" | "gatekeeper" | "trash" | "spam";
 
 export type MessageDirection = "inbound" | "outbound";
 
@@ -26,6 +26,8 @@ export type Message = {
 	status: MessageStatus | string;
 	read: boolean;
 	starred: boolean;
+	done?: boolean;
+	prioritySender?: boolean;
 	snoozedUntil?: string | null;
 	threadId: string | null;
 	inReplyTo?: string | null;
@@ -99,6 +101,8 @@ export type MessageCounts = {
 	folders: Record<MessageFolder, FolderCount>;
 	customFolders: Record<string, FolderCount>;
 	mailboxes: MailboxCount[];
+	/** Triggered follow-up reminders awaiting attention. */
+	followUps?: number;
 };
 
 export type MessageCountsDelta = {
