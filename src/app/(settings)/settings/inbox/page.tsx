@@ -5,6 +5,7 @@ import { InboxReadingLayoutSettings } from "@/components/settings/inbox-reading-
 import { InboxShortcutsSettings } from "@/components/settings/inbox-shortcuts-settings";
 import { MailboxAutoReplyForm } from "@/components/settings/mailbox-auto-reply-form";
 import { SpamFilterSettings } from "@/components/settings/spam-filter-settings";
+import { GatekeeperSettings } from "@/components/settings/gatekeeper-settings";
 import { BrowserNotificationSettings } from "@/components/settings/browser-notification-settings";
 
 export default function SettingsInboxPage() {
@@ -72,6 +73,13 @@ export default function SettingsInboxPage() {
 							<p className="mt-1 text-sm text-neutral-500">Control local spam analysis for incoming messages.</p>
 						</div>
 						<SpamFilterSettings />
+					</div>
+					<div className="py-6 first:pt-0 last:pb-0">
+						<div className="mb-4">
+							<h3 className="text-base font-semibold text-neutral-900">Gatekeeper</h3>
+							<p className="mt-1 text-sm text-neutral-500">Review mail from new senders before it reaches your inbox.</p>
+						</div>
+						<GatekeeperSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">

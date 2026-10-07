@@ -19,6 +19,7 @@ import { buildSendFormData, fetchDraft, formatAttachmentSize } from "./utils";
 import { RecipientInput } from "./recipient-input";
 import { RichTextEditor } from "./rich-text-editor";
 import { ScheduleSendMenu } from "./schedule-send-menu";
+import { FollowUpMenu } from "./follow-up-menu";
 import {
 	applyMailboxSignatureHtml,
 	hasMeaningfulHtml,
@@ -86,6 +87,7 @@ export function ComposeForm({
 	const [loadingDraft, setLoadingDraft] = useState(false);
 	const [deletingDraft, setDeletingDraft] = useState(false);
 	const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+	const [followUpAt, setFollowUpAt] = useState<Date | null>(null);
 	const [loadedDraftMailboxId, setLoadedDraftMailboxId] = useState<string | null>(null);
 	const [loadedDraftFrom, setLoadedDraftFrom] = useState<string | null>(null);
 	const [selectedFrom, setSelectedFrom] = useState("");
@@ -355,6 +357,7 @@ export function ComposeForm({
 				threading: threading ?? undefined,
 				draftId,
 				scheduledAt,
+				followUpAt,
 			}),
 		});
 		const data = (await res.json()) as { messageId?: string; scheduled?: boolean; error?: string };
@@ -385,6 +388,7 @@ export function ComposeForm({
 		setQuotedHtml(null);
 		setAttachments([]);
 		setScheduledAt(null);
+		setFollowUpAt(null);
 		setToast({ type: "success", message: data.scheduled ? "Message scheduled" : "Message sent" });
 		window.dispatchEvent(new Event("mailflare:messages-changed"));
 	}
@@ -833,6 +837,11 @@ export function ComposeForm({
 									disabled={loading || loadingDraft || !fromAddr}
 									value={scheduledAt}
 									onChange={setScheduledAt}
+								/>
+								<FollowUpMenu
+									disabled={loading || loadingDraft || !fromAddr}
+									value={followUpAt}
+									onChange={setFollowUpAt}
 								/>
 							</div>
 						</>

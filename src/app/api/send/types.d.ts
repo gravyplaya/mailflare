@@ -16,4 +16,6 @@ export interface SendRequestPayload {
 	/** Draft whose stored attachments (e.g. forwarded files) should be sent along. */
 	draftId?: string;
 	scheduledAt?: string;
+	/** When set, remind the sender if no reply lands in the thread by this time. */
+	followUpAt?: string;
 }

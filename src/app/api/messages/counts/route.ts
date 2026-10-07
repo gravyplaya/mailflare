@@ -2,7 +2,7 @@ import { and, count, eq, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { messages } from "@/db/schema";
+import { followUps, messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { buildMessageCounts } from "./utils";
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
 			read: messages.read,
 			starred: messages.starred,
 			snoozedUntil: messages.snoozedUntil,
+			done: messages.done,
 			total: count(),
 		})
 		.from(messages)
@@ -56,7 +57,13 @@ export async function GET(request: Request) {
 			messages.read,
 			messages.starred,
 			messages.snoozedUntil,
+			messages.done,
 		);
 
-	return NextResponse.json({ counts: buildMessageCounts(rows) });
+	const [followUpRow] = await db
+		.select({ total: count() })
+		.from(followUps)
+		.where(and(eq(followUps.userId, user.id), eq(followUps.status, "triggered")));
+
+	return NextResponse.json({ counts: buildMessageCounts(rows), followUps: followUpRow?.total ?? 0 });
 }

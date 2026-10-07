@@ -12,11 +12,14 @@ const emptyCounts: MessageCounts = {
 		sent: { total: 0, unread: 0 },
 		drafts: { total: 0, unread: 0 },
 		archived: { total: 0, unread: 0 },
+		done: { total: 0, unread: 0 },
+		gatekeeper: { total: 0, unread: 0 },
 		spam: { total: 0, unread: 0 },
 		trash: { total: 0, unread: 0 },
 	},
 	customFolders: {},
 	mailboxes: [],
+	followUps: 0,
 };
 
 export function useMessageCounts(mailboxId?: string | null, enabled = true) {

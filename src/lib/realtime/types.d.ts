@@ -13,6 +13,13 @@ export interface AgentDraftNotification {
 	type: "agent_draft";
 }
 
+export interface FollowUpDueNotification {
+	type: "follow_up_due";
+	messageId: string;
+	mailboxId: string;
+	subject: string | null;
+}
+
 export interface MailboxRevisionRow {
 	mailbox_id: string;
 	revision: number;
@@ -32,5 +39,5 @@ export interface RevisionNotification {
 
 export interface RealtimeNotificationRequest {
 	userIds: string[];
-	payload: NewMessageNotification | AgentDraftNotification;
+	payload: NewMessageNotification | AgentDraftNotification | FollowUpDueNotification;
 }

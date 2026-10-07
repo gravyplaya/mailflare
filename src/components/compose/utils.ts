@@ -26,6 +26,8 @@ export function buildSendFormData(input: {
 	/** Draft whose stored attachments should be sent with the message. */
 	draftId?: string | null;
 	scheduledAt?: Date | null;
+	/** Remind the sender if no reply lands in the thread by this time. */
+	followUpAt?: Date | null;
 	/** Embedded body images that were never uploaded to a draft; sent as inline attachments with their cid. */
 	inlineImages?: Array<{ file: File; contentId: string }>;
 }): FormData {
@@ -43,6 +45,7 @@ export function buildSendFormData(input: {
 	if (input.threading?.threadId) form.set("threadId", input.threading.threadId);
 	if (input.draftId) form.set("draftId", input.draftId);
 	if (input.scheduledAt) form.set("scheduledAt", input.scheduledAt.toISOString());
+	if (input.followUpAt) form.set("followUpAt", input.followUpAt.toISOString());
 	for (const attachment of input.attachments) {
 		form.append("attachments", attachment.file);
 	}

@@ -27,7 +27,7 @@ export type MessageListRowProps = {
 	dragMessageIds: string[];
 };
 
-export type RowMessageAction = "archive" | "trash" | "read" | "unread";
+export type RowMessageAction = "archive" | "trash" | "read" | "unread" | "done";
 
 export type MessageListRowActionsProps = {
 	message: Message;

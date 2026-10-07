@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getDb } from "@/db";
-import { messages } from "@/db/schema";
+import { contacts, messages } from "@/db/schema";
 import { getContactDisplayNameMap } from "@/lib/contacts/service";
 import { getFirstEmailAddressEntry, normalizeEmailAddress } from "@/lib/email/address";
 import { getMailboxAccessLevel, listAccessibleMailboxes } from "@/lib/mailboxes/access";
@@ -31,6 +31,7 @@ export async function GET(request: Request) {
 	const read = url.searchParams.get("read");
 	const starred = url.searchParams.get("starred");
 	const snoozed = url.searchParams.get("snoozed");
+	const done = url.searchParams.get("done");
 	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
 	const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
 	// Conversation view: one row per thread, represented by its newest message
@@ -72,6 +73,9 @@ export async function GET(request: Request) {
 		conditions.push(eq(messages.status, "received"));
 		conditions.push(isNull(messages.folderId));
 		conditions.push(gt(messages.snoozedUntil, new Date()));
+	}
+	if (done === "true") {
+		conditions.push(eq(messages.done, true));
 	}
 	if (read === "read") {
 		conditions.push(eq(messages.read, true));
@@ -172,15 +176,30 @@ export async function GET(request: Request) {
 			] as const),
 		),
 	);
+	// Priority senders highlight their mail in the inbox.
+	const prioritySendersByUserId = new Map(
+		await Promise.all(
+			Array.from(new Set(rows.map((message) => message.userId))).map(async (userId) => {
+				const db = getDb(env);
+				const priorityRows = await db
+					.select({ email: contacts.email })
+					.from(contacts)
+					.where(and(eq(contacts.userId, userId), eq(contacts.priority, true)));
+				return [userId, new Set(priorityRows.map((row) => row.email))] as const;
+			}),
+		),
+	);
 	// `Message.textBody`/`htmlBody` are optional on the wire type and the
 	// reading pane loads them from /api/messages/[id]/thread, so they are
 	// neither selected nor sent here.
 	const enrichedRows = rows.map(({ rawR2Key: _rawR2Key, ...message }) => {
 		const contactMap = contactMapsByUserId.get(message.userId);
+		const prioritySenders = prioritySendersByUserId.get(message.userId);
 		const accountName = message.mailboxId ? mailboxNameMap.get(message.mailboxId) : null;
 		return {
 			...message,
 			snippet: message.snippet,
+			prioritySender: message.direction === "inbound" && prioritySenders?.has(normalizeEmailAddress(message.fromAddr)) === true,
 			fromContactName:
 				(message.direction === "outbound" ? accountName : null) ??
 				contactMap?.get(normalizeEmailAddress(message.fromAddr)) ??

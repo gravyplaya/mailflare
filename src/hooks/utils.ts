@@ -33,6 +33,14 @@ export function getMessageQueryParams(
 	}
 	if (folder === "starred") params.set("starred", "true");
 	if (folder === "snoozed") params.set("snoozed", "true");
+	if (folder === "gatekeeper") {
+		params.set("direction", "inbound");
+		params.set("status", "pending");
+	}
+	if (folder === "done") {
+		params.set("status", "archived");
+		params.set("done", "true");
+	}
 
 	if (folder === "sent") {
 		params.set("direction", "outbound");
@@ -104,8 +112,8 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 		if (mailboxId) params.set("mailboxId", mailboxId);
 		const query = params.toString();
 		const res = await authFetch(`/api/messages/counts${query ? `?${query}` : ""}`);
-		const data = (await res.json()) as { counts?: MessageCounts };
-		const counts = data.counts;
+		const data = (await res.json()) as { counts?: MessageCounts; followUps?: number };
+		const counts = data.counts ? { ...data.counts, followUps: data.followUps ?? 0 } : undefined;
 		if (
 			counts &&
 			requestGeneration === messageCacheGeneration &&

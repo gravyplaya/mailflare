@@ -5,6 +5,7 @@ export function getMessageFolder(row: MessageCountRow): CountableFolder {
 	if (row.snoozedUntil && row.snoozedUntil > new Date()) return "snoozed";
 	if (row.status === "trash") return "trash";
 	if (row.status === "spam") return "spam";
+	if (row.status === "pending") return "gatekeeper";
 	if (row.status === "archived") return "archived";
 	if (row.direction === "inbound" && row.status === "received" && !row.folderId) return "inbox";
 	if (row.direction === "outbound" && row.status === "sent") return "sent";
@@ -20,6 +21,8 @@ export function createEmptyFolderCounts(): MessageCounts["folders"] {
 		sent: { total: 0, unread: 0 },
 		drafts: { total: 0, unread: 0 },
 		archived: { total: 0, unread: 0 },
+		done: { total: 0, unread: 0 },
+		gatekeeper: { total: 0, unread: 0 },
 		spam: { total: 0, unread: 0 },
 		trash: { total: 0, unread: 0 },
 	};
@@ -41,6 +44,10 @@ export function buildMessageCounts(rows: MessageCountRow[]): MessageCounts {
 		if (folder) {
 			folders[folder].total += weight;
 			if (unread) folders[folder].unread += weight;
+		}
+		if (row.status === "archived" && row.done) {
+			folders.done.total += weight;
+			if (unread) folders.done.unread += weight;
 		}
 
 		if (row.folderId) {

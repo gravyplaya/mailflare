@@ -1,14 +1,15 @@
 "use client";
 
-import { createElement, useState, useMemo, useCallback } from "react";
+import { createElement, useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Ban, BellOff, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, ShieldAlert, Trash2 } from "lucide-react";
+import { Archive, Ban, BellOff, CheckCircle2, Clock, FileCode2, Forward, Mail, MailOpen, MoreVertical, Reply, ReplyAll, ShieldAlert, Star, Trash2, VolumeX } from "lucide-react";
 import { useCompose } from "@/components/compose/compose-context";
 import { MessageSourceDialog } from "@/components/messages/message-source-dialog";
 import { MessageSnoozeDialog } from "./message-snooze-dialog";
 import { useHotkeys, useShortcuts } from "@/components/shortcuts";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { authFetch } from "@/lib/auth/client";
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import type { MessageActionsProps, ReplyMode } from "./types";
 import {
@@ -46,12 +47,82 @@ export function MessageActions({
 	const { openDraftComposer } = useCompose();
 	const { shortcutsEnabled } = useShortcuts();
 	const [pendingAction, setPendingAction] = useState<
-		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | null
+		BulkMessageAction | "unsubscribe" | ReplyMode | "forward" | "block" | "mute" | "priority" | null
 	>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [moreOpen, setMoreOpen] = useState(false);
 	const [sourceOpen, setSourceOpen] = useState(false);
 	const [snoozeOpen, setSnoozeOpen] = useState(false);
+	const [muted, setMuted] = useState(false);
+	const [priority, setPriority] = useState(false);
+
+	useEffect(() => {
+		if (direction !== "inbound" || !senderAddress) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const [muteResponse, priorityResponse] = await Promise.all([
+					authFetch(`/api/messages/${messageId}/mute`),
+					authFetch(`/api/contacts/priority?email=${encodeURIComponent(senderAddress)}`),
+				]);
+				if (cancelled) return;
+				if (muteResponse.ok) {
+					const data = (await muteResponse.json()) as { muted?: boolean };
+					setMuted(!!data.muted);
+				}
+				if (priorityResponse.ok) {
+					const data = (await priorityResponse.json()) as { priority?: boolean };
+					setPriority(!!data.priority);
+				}
+			} catch {
+				// Toggle buttons still work; they just start from the unpressed state.
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [direction, messageId, senderAddress]);
+
+	const toggleMuted = useCallback(async () => {
+		setMoreOpen(false);
+		setError(null);
+		setPendingAction("mute");
+		try {
+			const response = muted
+				? await authFetch(`/api/messages/${messageId}/mute`, { method: "DELETE" })
+				: await authFetch(`/api/messages/${messageId}/mute`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ autoArchive: false }),
+					});
+			if (!response.ok) throw new Error("Could not update mute state");
+			setMuted(!muted);
+		} catch (muteError) {
+			setError(muteError instanceof Error ? muteError.message : "Could not update mute state");
+		} finally {
+			setPendingAction(null);
+		}
+	}, [messageId, muted]);
+
+	const togglePriority = useCallback(async () => {
+		setMoreOpen(false);
+		setError(null);
+		setPendingAction("priority");
+		try {
+			const response = await authFetch("/api/contacts/priority", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ address: senderAddress, priority: !priority }),
+			});
+			if (!response.ok) throw new Error("Could not update priority sender");
+			setPriority(!priority);
+			window.dispatchEvent(new Event("mailflare:messages-changed"));
+		} catch (priorityError) {
+			setError(priorityError instanceof Error ? priorityError.message : "Could not update priority sender");
+		} finally {
+			setPendingAction(null);
+		}
+	}, [priority, senderAddress]);
 
 	const runAction = useCallback(async (action: BulkMessageAction) => {
 		setMoreOpen(false);
@@ -363,6 +434,32 @@ export function MessageActions({
 									<Ban className="h-4 w-4" />
 									Block contact
 								</button>
+								<button
+									type="button"
+									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+									onClick={() => void togglePriority()}
+								>
+									<Star className="h-4 w-4" />
+									{priority ? "Remove priority sender" : "Mark sender as priority"}
+								</button>
+								<button
+									type="button"
+									className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+									onClick={() => void toggleMuted()}
+								>
+									<VolumeX className="h-4 w-4" />
+									{muted ? "Unmute thread" : "Mute thread"}
+								</button>
+								{(status === "received" || status === "archived" || status === "pending") && (
+									<button
+										type="button"
+										className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+										onClick={() => void runAction("done")}
+									>
+										<CheckCircle2 className="h-4 w-4" />
+										Mark as done
+									</button>
+								)}
 								<hr className="my-1 border-neutral-100" />
 							</>
 						)}
