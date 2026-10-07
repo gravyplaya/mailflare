@@ -1,33 +1,38 @@
 import type { Message } from "@/hooks/types";
 import { authFetch } from "@/lib/auth/client";
+import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailDisplayName, splitEmailAddressList } from "@/lib/email/address";
 import { formatUserDate, getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
 import type { MailboxOption } from "@/components/mailbox-provider";
 import type { EmailPageTitleInput } from "./types";
 import type { MessageFolderConfig } from "./types";
 import type { PageRange } from "./types";
+import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
+import type { PermanentDeleteFolder } from "@/app/api/messages/bulk/types";
+import type { EmptyFolderResponse } from "@/app/api/messages/empty/types";
 
 export function getMessageParty(
 	message: Message,
 	folder: MessageFolderConfig["folder"],
 	currentAccountName?: string,
+	t: Translator = defaultTranslator,
 ) {
-	if (folder === "drafts") return "Draft";
-	if (folder === "sent") return formatRecipientSummary(message.toAddr, message.toContactName);
+	if (folder === "drafts") return t("list.draft");
+	if (folder === "sent") return formatRecipientSummary(message.toAddr, message.toContactName, t);
 	if (message.direction === "outbound" && currentAccountName) return currentAccountName;
-	return message.fromContactName ?? (message.fromAddr ? getEmailDisplayName(message.fromAddr) : "Unknown sender");
+	return message.fromContactName ?? (message.fromAddr ? getEmailDisplayName(message.fromAddr) : t("list.unknownSender"));
 }
 
 /** "Maya Chen, +2" for a multi-recipient message, or just the one name. */
-export function formatRecipientSummary(toAddr: string, firstContactName?: string | null): string {
+export function formatRecipientSummary(toAddr: string, firstContactName?: string | null, t: Translator = defaultTranslator): string {
 	const entries = splitEmailAddressList(toAddr);
-	if (entries.length === 0) return "No recipient";
+	if (entries.length === 0) return t("list.noRecipient");
 	const first = firstContactName ?? getEmailDisplayName(entries[0]);
 	return entries.length > 1 ? `${first}, +${entries.length - 1}` : first;
 }
 
 export function getMessagePartyClassName(message: Message, folder: MessageFolderConfig["folder"]) {
-	if (folder === "drafts") return "truncate font-semibold text-red-600";
+	if (folder === "drafts") return "truncate font-medium text-red-600";
 
 	const unread = isMessageListRowUnread(message);
 	return `truncate ${unread ? "font-bold text-neutral-900" : "text-neutral-800"}`;
@@ -39,9 +44,9 @@ export function isMessageListRowUnread(message: Message): boolean {
 	return message.direction === "inbound" && !message.read;
 }
 
-export function getMessagePreview(message: Message, folder: MessageFolderConfig["folder"]) {
-	if (folder === "drafts") return message.snippet || message.toAddr || "No content";
-	return message.snippet || "No preview";
+export function getMessagePreview(message: Message, folder: MessageFolderConfig["folder"], t: Translator = defaultTranslator) {
+	if (folder === "drafts") return message.snippet || message.toAddr || t("list.noContent");
+	return message.snippet || t("thread.noPreview");
 }
 
 export function formatMessageListTimestamp(createdAt: string): string {
@@ -72,20 +77,42 @@ export function getEmailPageTitleCount(total: number, unread: number): number {
 	return unread > 0 ? unread : total;
 }
 
-export function formatEmailPageTitle({ location, total, unread, emailAddress }: EmailPageTitleInput): string {
-	if (location === "Inbox") return unread > 0 ? `Inbox (${unread})` : "Inbox";
+export function formatEmailPageTitle({ location, total, unread, emailAddress, inbox = location === "Inbox" }: EmailPageTitleInput): string {
+	if (inbox) return unread > 0 ? `${location} (${unread})` : location;
 	const count = getEmailPageTitleCount(total, unread);
 	const suffix = emailAddress ? ` - ${emailAddress}` : "";
 	return `${location} (${count})${suffix}`;
 }
 
-export async function runBulkMessageAction(messageIds: string[], action: string, notify = true) {
+export async function runBulkMessageAction(messageIds: string[], action: string, notify = true, folderId?: string) {
 	const response = await authFetch("/api/messages/bulk", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ messageIds, action }),
+		body: JSON.stringify({ messageIds, action, folderId }),
 	});
 
-	if (!response.ok) throw new Error("Unable to update selected messages");
+	if (!response.ok) throw new Error(defaultTranslator("error.updateSelected"));
+	if (action === "read" || action === "unread") markMessagesReadInCaches(messageIds, action === "read");
 	if (notify) window.dispatchEvent(new Event("mailflare:messages-changed"));
+}
+
+/**
+ * Empty a mailbox's Trash or Spam. The API deletes in batches and reports what is
+ * left, so keep calling until nothing remains (or a call stops making progress).
+ */
+export async function emptyMessageFolder(mailboxId: string, folder: PermanentDeleteFolder): Promise<number> {
+	let deletedTotal = 0;
+	for (;;) {
+		const response = await authFetch("/api/messages/empty", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ mailboxId, folder }),
+		});
+		const data = (await response.json().catch(() => ({}))) as EmptyFolderResponse;
+		if (!response.ok) throw new Error(data.error ?? defaultTranslator("error.emptyFolder"));
+		deletedTotal += data.deleted ?? 0;
+		if (!data.remaining || !data.deleted) break;
+	}
+	window.dispatchEvent(new Event("mailflare:messages-changed"));
+	return deletedTotal;
 }

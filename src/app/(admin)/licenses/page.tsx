@@ -1,3 +1,4 @@
+import { getServerTranslator } from "@/lib/i18n/server";
 import { Check, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,16 +12,17 @@ import {
 import { LicenseActivation } from "./license-activation";
 import { LICENSE_PLANS } from "./utils";
 
-export default function LicensesPage() {
+export default async function LicensesPage() {
+  const t = await getServerTranslator();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-medium text-neutral-900">Licenses</h1>
+        <h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("licenses.title")}</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          Choose a one-time license. Each purchase includes updates released
-          during the first year.
+          {t("licenses.description")}
         </p>
       </div>
+      <LicenseActivation>
       <div className="grid gap-4 md:grid-cols-2">
         {LICENSE_PLANS.map((plan) => {
           const Icon = plan.icon;
@@ -47,16 +49,16 @@ export default function LicensesPage() {
                     )}
                   </p>
                 </div>
-                <CardDescription>{plan.description}</CardDescription>
+                <CardDescription>{t(plan.descriptionKey)}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 pt-6 flex flex-col flex-1 min-h-0">
-                {plan.features.map((feature) => (
+                {plan.featureKeys.map((feature) => (
                   <p
                     key={feature}
                     className="flex gap-2 text-sm text-neutral-600"
                   >
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-                    {feature}
+                    {t(feature)}
                   </p>
                 ))}
                 <span className="flex-1" />
@@ -66,7 +68,7 @@ export default function LicensesPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Get {plan.name}
+                    {t("licenses.get", { plan: plan.name })}
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
@@ -75,7 +77,7 @@ export default function LicensesPage() {
           );
         })}
       </div>
-      <LicenseActivation />
+      </LicenseActivation>
     </div>
   );
 }

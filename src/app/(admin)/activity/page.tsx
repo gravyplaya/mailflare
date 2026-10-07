@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { LogIn, LogOut } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -12,6 +13,7 @@ import {
 } from "./utils";
 
 export default function ActivityPage() {
+  const { t } = useLanguage();
   const activity = useQuery({
     queryKey: ["activity"],
     queryFn: fetchActivity,
@@ -20,9 +22,9 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-medium text-neutral-900">Activity</h1>
+        <h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("activity.title")}</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Login and logout activity across user accounts.
+          {t("activity.description")}
         </p>
       </div>
 
@@ -30,10 +32,10 @@ export default function ActivityPage() {
         <table className="w-full min-w-[760px] table-fixed text-left">
           <thead className="border-b border-neutral-100 bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             <tr>
-              <th className="w-32 px-5 py-3">Activity</th>
-              <th className="px-5 py-3">User</th>
-              <th className="w-64 px-5 py-3">Device</th>
-              <th className="w-48 px-5 py-3">Time</th>
+              <th className="w-32 px-5 py-3">{t("activity.col.activity")}</th>
+              <th className="px-5 py-3">{t("activity.col.user")}</th>
+              <th className="w-64 px-5 py-3">{t("activity.col.device")}</th>
+              <th className="w-48 px-5 py-3">{t("activity.col.time")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
@@ -57,7 +59,7 @@ export default function ActivityPage() {
             {!activity.isLoading && (activity.data ?? []).length === 0 && (
               <tr>
                 <td colSpan={4} className="px-5 py-4 text-sm text-neutral-500">
-                  No login or logout activity yet
+                  {t("activity.none")}
                 </td>
               </tr>
             )}
@@ -69,26 +71,26 @@ export default function ActivityPage() {
                   <td className="px-5 py-4">
                     <Badge variant="outline" className="gap-1">
                       <Icon className="h-3 w-3" />
-                      {getActivityLabel(log.action)}
+                      {getActivityLabel(log.action, t)}
                     </Badge>
                   </td>
                   <td className="px-5 py-4">
                     <p className="flex flex-col truncate no-font-mono">
-                      <span>{log.actorEmail ?? "(unknown email)"}</span>
+                      <span>{log.actorEmail ?? t("activity.unknownEmail")}</span>
                     </p>
                     <small className="text-neutral-500">
-                      {metadata.city || "(unknown city)"} •{" "}
-                      {metadata.country || "(unknown country)"}
+                      {metadata.city || t("activity.unknownCity")} •{" "}
+                      {metadata.country || t("activity.unknownCountry")}
                     </small>
                   </td>
                   <td className="px-5 py-4">
                     <p className="flex flex-col truncate no-font-mono">
-                      {metadata.device ?? "(unknown device)"}
+                      {metadata.device ?? t("activity.unknownDevice")}
                     </p>
 
                     <small className="text-neutral-500">
-                      {metadata.platform || "(unknown platform)"} •{" "}
-                      {metadata.ipAddress ?? "(unknown IP)"}
+                      {metadata.platform || t("activity.unknownPlatform")} •{" "}
+                      {metadata.ipAddress ?? t("activity.unknownIp")}
                     </small>
                   </td>
                   <td className="px-5 py-4 text-sm text-neutral-500">

@@ -1,3 +1,4 @@
+import type { TranslationKey } from "@/lib/i18n/types";
 import type { LucideIcon } from "lucide-react";
 import type { ButtonProps } from "@/components/ui/button";
 import type { MailboxSelectorUser } from "@/components/mailbox-selector-types";
@@ -17,7 +18,7 @@ export type HomeAccountMenuProps = {
 
 export type HomeAction = {
 	href: string;
-	label: string;
+	labelKey: TranslationKey;
 	variant: ButtonProps["variant"];
 };
 
@@ -27,7 +28,7 @@ export type LandingNavItem = {
 };
 
 export type SidebarItem = {
-	label: string;
+	labelKey: TranslationKey;
 	icon: LucideIcon;
 	active?: boolean;
 	count?: string;
@@ -36,9 +37,9 @@ export type SidebarItem = {
 export type MailPreview = {
 	icon: LucideIcon;
 	sender: string;
-	subject: string;
-	preview: string;
-	badge: string;
+	subjectKey: TranslationKey;
+	previewKey: TranslationKey;
+	badgeKey: TranslationKey;
 };
 
 export type LandingStat = {

@@ -87,7 +87,7 @@ export async function ensureMailboxDomainRouting(
 		.limit(1);
 	if (!primaryDomain) return;
 	const availableDomains = await db
-		.select({ hostname: domains.hostname, zoneId: domains.zoneId })
+		.select({ hostname: domains.hostname, zoneId: domains.zoneId, receivingProvider: domains.receivingProvider })
 		.from(domains)
 		.where(eq(domains.userId, primaryDomain.userId));
 	const domainsByHostname = new Map(availableDomains.map((domain) => [domain.hostname.toLowerCase(), domain]));
@@ -97,7 +97,8 @@ export async function ensureMailboxDomainRouting(
 		addresses.map(async (address) => {
 			const hostname = address.slice(address.lastIndexOf("@") + 1);
 			const domain = domainsByHostname.get(hostname);
-			if (domain) await ensureEmailRoutingRuleToWorker(env, domain.zoneId, address, changes);
+			// Worker routes only matter when Cloudflare is what receives this domain's mail.
+			if (domain && domain.receivingProvider === "cloudflare") await ensureEmailRoutingRuleToWorker(env, domain.zoneId, address, changes);
 		}),
 	);
 	const failure = results.find((result) => result.status === "rejected");

@@ -1,9 +1,10 @@
+import type { TranslationKey } from "@/lib/i18n/types";
 import { authFetch } from "@/lib/auth/client";
 import type { MessageCountsDelta } from "@/hooks/types";
 import { dateFromZonedFields, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
 
 export type SnoozePreset = {
-	label: string;
+	labelKey: TranslationKey;
 	value: string;
 };
 
@@ -21,9 +22,9 @@ export function getSnoozePresets(now = new Date()): SnoozePreset[] {
 	nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
 
 	return [
-		{ label: "Tomorrow", value: formatSnoozeDateTime(dateFromZonedFields(tomorrow, getUserTimeZone())) },
-		{ label: "Next week", value: formatSnoozeDateTime(dateFromZonedFields(nextWeek, getUserTimeZone())) },
-		{ label: "Next month", value: formatSnoozeDateTime(dateFromZonedFields(nextMonth, getUserTimeZone())) },
+		{ labelKey: "snooze.tomorrow", value: formatSnoozeDateTime(dateFromZonedFields(tomorrow, getUserTimeZone())) },
+		{ labelKey: "snooze.nextWeek", value: formatSnoozeDateTime(dateFromZonedFields(nextWeek, getUserTimeZone())) },
+		{ labelKey: "snooze.nextMonth", value: formatSnoozeDateTime(dateFromZonedFields(nextMonth, getUserTimeZone())) },
 	];
 }
 

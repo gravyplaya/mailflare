@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { domains, mailboxAccess, mailboxes } from "@/db/schema";
 import { isTeamMailboxSharingEnabled } from "@/lib/mailboxes/access-utils";
 import type { NewMessageNotification, AgentDraftNotification, FollowUpDueNotification } from "./types";
+import { sendPushNotifications } from "@/lib/push/server";
 
 export function getSessionTokenFromRequest(request: Request): string | undefined {
 	const cookie = request.headers.get("Cookie");
@@ -55,8 +56,8 @@ export async function notifyUsersOfNewMessage(
 ): Promise<void> {
 	// Next dev uses a bindings-only proxy; realtime delivery runs in worker.ts.
 	if (!env.REALTIME) return;
-	await Promise.allSettled(
-		userIds.map((userId) => {
+	await Promise.allSettled([
+		...userIds.map((userId) => {
 			const hub = env.REALTIME.getByName(userId);
 			return hub.fetch("https://mailflare-realtime/notify", {
 				method: "POST",
@@ -64,5 +65,7 @@ export async function notifyUsersOfNewMessage(
 				body: JSON.stringify(payload),
 			});
 		}),
-	);
+		// Push notifications only cover new mail; follow-up reminders stay in-app.
+		...(payload.type === "agent_draft" || payload.type === "follow_up_due" ? [] : [sendPushNotifications(env, userIds, payload)]),
+	]);
 }

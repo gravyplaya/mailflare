@@ -73,6 +73,10 @@ export const addDomainSchema = z.object({
 	enableRouting: z.boolean().optional(),
 	enableSending: z.boolean().optional(),
 	replaceMxRecords: z.boolean().optional(),
+	/** Which service sends mail for the domain; derived from `enableSending` when omitted. */
+	sendingProvider: z.enum(["none", "cloudflare", "resend", "ses"]).optional(),
+	/** Which service receives mail for the domain; Cloudflare Email Routing when omitted. */
+	receivingProvider: z.enum(["none", "cloudflare", "resend", "ses"]).optional(),
 });
 
 export const loginSchema = z.object({
@@ -231,6 +235,10 @@ export const updateShortcutsSettingsSchema = z.object({
 export const updateSpamSettingsSchema = z.object({
 	enabled: z.boolean(),
 	aiEnabled: z.boolean(),
+});
+
+export const updateTrashRetentionSettingsSchema = z.object({
+	days: z.number().int().min(1).max(365).nullable(),
 });
 
 export const updateRecipientAddressSettingsSchema = z.object({

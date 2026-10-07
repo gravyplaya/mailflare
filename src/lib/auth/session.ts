@@ -37,6 +37,17 @@ export async function getUserFromSession(
 	env: CloudflareEnv,
 	token: string | undefined,
 ): Promise<typeof users.$inferSelect | null> {
+	const session = await getSessionFromToken(env, token);
+	if (!session) return null;
+	const db = getDb(env);
+	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
+	return user ?? null;
+}
+
+export async function getSessionFromToken(
+	env: CloudflareEnv,
+	token: string | undefined,
+): Promise<typeof sessions.$inferSelect | null> {
 	if (!token) return null;
 	const db = getDb(env);
 	const tokenHash = await hashSessionToken(token);
@@ -45,9 +56,7 @@ export async function getUserFromSession(
 		.from(sessions)
 		.where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date())))
 		.limit(1);
-	if (!session) return null;
-	const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
-	return user ?? null;
+	return session ?? null;
 }
 
 export async function deleteSession(env: CloudflareEnv, token: string): Promise<void> {

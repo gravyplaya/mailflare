@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { formatUserDate } from "@/lib/time/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ export function ContactDetailsTrigger({
 	label,
 	className,
 }: ContactDetailsTriggerProps) {
+	const { t } = useLanguage();
 	const [open, setOpen] = useState(false);
 	const visibleLabel = label ?? name;
 	const [renamed, setRenamed] = useState<{ from: string; value: string } | null>(null);
@@ -54,7 +56,7 @@ export function ContactDetailsTrigger({
 				setDisplayName(nextContact.displayName ?? name);
 			})
 			.catch((loadError) => {
-				if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load contact");
+				if (!cancelled) setError(loadError instanceof Error ? loadError.message : t("contact.loadFailed"));
 			})
 			.finally(() => {
 				if (!cancelled) setLoading(false);
@@ -78,7 +80,7 @@ export function ContactDetailsTrigger({
 				detail: { email: updated.email, displayName: nextName },
 			}));
 		} catch (saveError) {
-			setError(saveError instanceof Error ? saveError.message : "Unable to update contact");
+			setError(saveError instanceof Error ? saveError.message : t("contact.updateFailed"));
 		} finally {
 			setSaving(false);
 		}
@@ -98,8 +100,8 @@ export function ContactDetailsTrigger({
 			<Dialog open={open} onOpenChange={handleOpenChange}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Contact details</DialogTitle>
-						<DialogDescription>Update how this contact appears in your mailbox.</DialogDescription>
+						<DialogTitle>{t("contact.title")}</DialogTitle>
+						<DialogDescription>{t("contact.description")}</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-5">
 						<div className="flex flex-col items-start gap-4">
@@ -112,7 +114,7 @@ export function ContactDetailsTrigger({
 							/>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="contact-display-name">Name</Label>
+							<Label htmlFor="contact-display-name">{t("contact.name")}</Label>
 							<Input
 								id="contact-display-name"
 								value={displayName}
@@ -121,7 +123,7 @@ export function ContactDetailsTrigger({
 							/>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="contact-email">Email</Label>
+							<Label htmlFor="contact-email">{t("contact.email")}</Label>
 							<Input
 								id="contact-email"
 								value={contact?.email ?? address}
@@ -130,17 +132,17 @@ export function ContactDetailsTrigger({
 						</div>
 						<div className="grid gap-3 rounded-lg bg-neutral-50 p-3 text-sm sm:grid-cols-2">
 							<div>
-								<p className="text-xs font-medium uppercase text-neutral-400">Source</p>
-								<p className="mt-1 capitalize text-neutral-700">{contact?.source ?? "Email"}</p>
+								<p className="text-xs font-medium uppercase text-neutral-400">{t("contact.source")}</p>
+								<p className="mt-1 capitalize text-neutral-700">{contact?.source ?? t("contact.sourceEmail")}</p>
 							</div>
 							<div>
-								<p className="text-xs font-medium uppercase text-neutral-400">Last seen</p>
+								<p className="text-xs font-medium uppercase text-neutral-400">{t("contact.lastSeen")}</p>
 								<p className="mt-1 text-neutral-700">
-									{contact?.lastSeenAt ? formatUserDate(contact.lastSeenAt, { month: "short", day: "2-digit", year: "numeric" }) : "Unknown"}
+									{contact?.lastSeenAt ? formatUserDate(contact.lastSeenAt, { month: "short", day: "2-digit", year: "numeric" }) : t("contact.unknown")}
 								</p>
 							</div>
 							{contact?.blocked && (
-								<p className="text-sm font-medium text-red-600">Blocked contact</p>
+								<p className="text-sm font-medium text-red-600">{t("contact.blocked")}</p>
 							)}
 						</div>
 						{error && <p className="text-sm text-red-600">{error}</p>}
@@ -149,7 +151,7 @@ export function ContactDetailsTrigger({
 							onClick={saveContact}
 							disabled={loading || saving || !displayName.trim()}
 						>
-							{saving ? "Saving..." : "Save contact"}
+							{saving ? t("contact.saving") : t("contact.save")}
 						</Button>
 					</div>
 				</DialogContent>

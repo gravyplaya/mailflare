@@ -1,9 +1,10 @@
+import type { TranslationKey } from "@/lib/i18n/types";
 import type { AdminApiKeyScope } from "@/lib/api/scopes-types";
 
-export const ADMIN_KEY_PERMISSIONS: { value: AdminApiKeyScope; label: string; description: string }[] = [
-	{ value: "domains", label: "Manage domains", description: "Add and remove domains, and manage their DNS setup." },
-	{ value: "accounts", label: "Manage accounts", description: "Create and update accounts. Requires a Team license." },
-	{ value: "mailboxes", label: "Manage mailboxes", description: "Create, update, and remove mailboxes." },
+export const ADMIN_KEY_PERMISSIONS: { value: AdminApiKeyScope; labelKey: TranslationKey; descriptionKey: TranslationKey }[] = [
+	{ value: "domains", labelKey: "adminKeys.perm.domains", descriptionKey: "adminKeys.perm.domainsDesc" },
+	{ value: "accounts", labelKey: "adminKeys.perm.accounts", descriptionKey: "adminKeys.perm.accountsDesc" },
+	{ value: "mailboxes", labelKey: "adminKeys.perm.mailboxes", descriptionKey: "adminKeys.perm.mailboxesDesc" },
 ];
 
 export function parseApiKeyScopes(scopes: string): string[] {

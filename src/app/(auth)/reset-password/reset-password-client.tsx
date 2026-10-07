@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { LockKeyhole } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { confirmPasswordReset } from "./utils";
 
 export function ResetPasswordClient() {
+	const { t } = useLanguage();
 	const token = useSearchParams().get("token") ?? "";
 	const [password, setPassword] = useState("");
 	const [confirm, setConfirm] = useState("");
@@ -21,7 +23,7 @@ export function ResetPasswordClient() {
 	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		if (password !== confirm) {
-			setError("Passwords do not match");
+			setError(t("auth.reset.mismatch"));
 			return;
 		}
 		setLoading(true);
@@ -29,12 +31,12 @@ export function ResetPasswordClient() {
 		try {
 			const result = await confirmPasswordReset(token, password);
 			if (!result.ok) {
-				setError(result.error ?? "Could not reset the password");
+				setError(result.error ?? t("auth.reset.failed"));
 				return;
 			}
 			setDone(true);
 		} catch {
-			setError("Unable to reach the server. Please try again.");
+			setError(t("auth.serverUnreachable"));
 		} finally {
 			setLoading(false);
 		}
@@ -42,9 +44,9 @@ export function ResetPasswordClient() {
 
 	if (!token) {
 		return (
-			<AuthShell icon={LockKeyhole} title="Reset link missing" description="Open the link from the reset email to choose a new password.">
+			<AuthShell icon={LockKeyhole} title={t("auth.reset.linkMissing")} description={t("auth.reset.linkMissingDescription")}>
 				<Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
-					Request a new link
+					{t("auth.reset.requestNew")}
 				</Link>
 			</AuthShell>
 		);
@@ -53,16 +55,16 @@ export function ResetPasswordClient() {
 	return (
 		<AuthShell
 			icon={LockKeyhole}
-			title={done ? "Password updated" : "Choose a new password"}
+			title={done ? t("auth.reset.updated") : t("auth.reset.chooseNew")}
 			description={
 				done
-					? "You have been signed out everywhere. Sign in with your new password to continue."
-					: "Use at least 8 characters. Every other session for this account will be signed out."
+					? t("auth.reset.doneDescription")
+					: t("auth.reset.description")
 			}
 			footer={
 				done ? (
 					<Link href="/login" className="text-sm font-medium text-blue-600 hover:underline">
-						Go to sign in
+						{t("auth.reset.goToSignIn")}
 					</Link>
 				) : undefined
 			}
@@ -70,7 +72,7 @@ export function ResetPasswordClient() {
 			{!done && (
 				<form onSubmit={onSubmit} className="space-y-5">
 					<div className="space-y-2">
-						<Label htmlFor="password">New password</Label>
+						<Label htmlFor="password">{t("auth.reset.newPassword")}</Label>
 						<Input
 							id="password"
 							type="password"
@@ -83,7 +85,7 @@ export function ResetPasswordClient() {
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label htmlFor="confirm">Confirm new password</Label>
+						<Label htmlFor="confirm">{t("auth.reset.confirm")}</Label>
 						<Input
 							id="confirm"
 							type="password"
@@ -98,7 +100,7 @@ export function ResetPasswordClient() {
 						<p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>
 					)}
 					<Button type="submit" className="h-11 w-full rounded-full px-6 active:scale-[0.98]" disabled={loading}>
-						{loading ? "Saving..." : "Set new password"}
+						{loading ? t("common.saving") : t("auth.reset.setNew")}
 					</Button>
 				</form>
 			)}

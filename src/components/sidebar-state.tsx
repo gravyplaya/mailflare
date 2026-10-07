@@ -7,9 +7,9 @@ import { isMobileViewport, useIsMobile } from "./sidebar-mobile-utils";
 import { readInitialSidebarMinimal, saveInitialSidebarMinimal, syncInitialSidebarWidth } from "./sidebar-state-utils";
 import type { SidebarProviderProps, SidebarState } from "./sidebar-state-types";
 
-const SidebarContext = createContext<SidebarState>({ minimal: false, width: 260, userId: null, toggle: () => undefined, setWidth: () => undefined, setForcedMinimal: () => undefined });
+const SidebarContext = createContext<SidebarState>({ minimal: false, width: 260, userId: null, toggle: () => undefined, setWidth: () => undefined, setForcedMinimal: () => undefined, mobile: false, mobileOpen: false });
 
-export function SidebarProvider({ children, expandedWidth = 260 }: SidebarProviderProps) {
+export function SidebarProvider({ children, expandedWidth = 260, mobileOverlay = false }: SidebarProviderProps) {
 	const [minimal, setMinimal] = useState(false);
 	const [forcedMinimal, setForcedMinimal] = useState(false);
 	const [width, setWidth] = useState(expandedWidth);
@@ -18,6 +18,13 @@ export function SidebarProvider({ children, expandedWidth = 260 }: SidebarProvid
 	const [storageKey, setStorageKey] = useState<string | null>(null);
 	const pathname = usePathname();
 	const mobile = useIsMobile();
+	const [mobileOpen, setMobileOpen] = useState(false);
+	// Overlay layouts have no minified rail on phones: the menu is either fully shown over the page or hidden.
+	const overlay = mobileOverlay && mobile;
+
+	useEffect(() => {
+		setMobileOpen(false);
+	}, [pathname, mobile]);
 
 	// Collapse on first load and after every navigation on phones, so the overlay never sticks open.
 	useEffect(() => {
@@ -72,6 +79,10 @@ export function SidebarProvider({ children, expandedWidth = 260 }: SidebarProvid
 	}, []);
 
 	function toggle() {
+		if (overlay) {
+			setMobileOpen((current) => !current);
+			return;
+		}
 		if (forcedMinimal) {
 			setForcedMinimal(false);
 			setMinimal(false);
@@ -92,7 +103,7 @@ export function SidebarProvider({ children, expandedWidth = 260 }: SidebarProvid
 	}
 
 	return (
-		<SidebarContext.Provider value={{ minimal: minimal || forcedMinimal, width, userId, toggle, setWidth, setForcedMinimal }}>
+		<SidebarContext.Provider value={{ minimal: !overlay && (minimal || forcedMinimal), width, userId, toggle, setWidth, setForcedMinimal, mobile: overlay, mobileOpen }}>
 			<div className="h-full" style={{ "--sidebar-width": widthReady ? `${minimal || forcedMinimal ? 72 : width}px` : `var(--persisted-sidebar-width, ${expandedWidth}px)`, "--sidebar-transition-duration": widthReady ? "200ms" : "0ms" } as React.CSSProperties}>
 				{children}
 			</div>

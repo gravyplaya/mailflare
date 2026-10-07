@@ -1,6 +1,7 @@
 import { authFetch } from "@/lib/auth/client";
 import { parseSearchQuery } from "@/lib/search/query-utils";
 import { getUserTimeZone } from "@/lib/time/utils";
+import { setCachedMessageRead } from "@/lib/messages/detail-cache";
 import type { MessageFilterOptions, MessageFolder } from "./types";
 import type { MessageCounts, MessageListResponse } from "./types";
 
@@ -91,6 +92,39 @@ export function clearMessageListCache() {
 	messageListRequests.clear();
 }
 
+/**
+ * Mirror a read/unread change into the cached lists and details, so a list
+ * remounted later (or a detail reopened) never shows the old state.
+ */
+export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
+	const ids = new Set(messageIds);
+	for (const [key, response] of messageListCache) {
+		if (!response.messages?.some((message) => ids.has(message.id))) continue;
+		messageListCache.set(key, {
+			...response,
+			messages: response.messages.map((message) => {
+				if (!ids.has(message.id)) return message;
+				const threadSize = message.threadMessageIds?.length;
+				return {
+					...message,
+					read,
+					...(threadSize !== undefined ? { threadUnread: read ? 0 : threadSize } : {}),
+				};
+			}),
+		});
+	}
+	for (const id of ids) setCachedMessageRead(id, read);
+}
+
+// Caches must drop on every change, including ones made while no list is mounted
+// (e.g. reading a message from the popup on a page without the inbox list).
+if (typeof window !== "undefined") {
+	window.addEventListener("mailflare:messages-changed", () => {
+		clearMessageListCache();
+		clearMessageCountsCache();
+	});
+}
+
 export function clearMessageClientState() {
 	messageCacheGeneration += 1;
 	messageCountsGeneration += 1;
@@ -135,7 +169,7 @@ export async function fetchMessageCounts(mailboxId?: string | null, force = fals
 export async function fetchMessageList(params: URLSearchParams, force = false): Promise<MessageListResponse> {
 	const key = params.toString();
 	if (!force && messageListCache.has(key)) return messageListCache.get(key) ?? {};
-	if (messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
+	if (!force && messageListRequests.has(key)) return messageListRequests.get(key) ?? {};
 
 	const requestGeneration = messageCacheGeneration;
 	const request = authFetch(`/api/messages?${key}`)

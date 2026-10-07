@@ -21,7 +21,8 @@ async function bundle(entry, outfile) {
 		format: "esm",
 		target: "node22",
 		logLevel: "silent",
-		alias: { "@": join(root, "src") },
+		// The DOM-only HTML pipeline is not needed here and its parser deps do not bundle for node.
+		alias: { "@/lib/email/html": join(root, "tests/stubs/email-html.mjs"), "@": join(root, "src") },
 		external: ["react", "react-dom", "next", "next/*"],
 	});
 	return import(pathToFileURL(join(outDir, outfile)).href);
@@ -106,6 +107,6 @@ test("migration adds the user column off by default and the journal lists it", (
 	assert.equal(db.prepare("SELECT show_full_recipient_addresses AS value FROM users").get().value, 0);
 
 	const journal = JSON.parse(readFileSync(join(root, "drizzle/migrations/meta/_journal.json"), "utf8"));
-	assert.equal(journal.entries.at(-1).tag, "0050_add_show_full_recipient_addresses");
-	assert.equal(journal.entries.at(-1).idx, 42);
+	const entry = journal.entries.find((item) => item.tag === "0050_add_show_full_recipient_addresses");
+	assert.equal(entry?.idx, 42);
 });

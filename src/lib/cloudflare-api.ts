@@ -34,7 +34,7 @@ export async function cfRequest<T>(
 
 	if (!json.success) {
 		throw new CloudflareApiError(
-			`${formatCloudflareError(path, res.status, res.statusText, json.errors ?? [])}${getCloudflareAuthHint(json.errors ?? [])}`,
+			`${formatCloudflareError(path, res.status, res.statusText, json.errors ?? [])}${getCloudflareAuthHint(json.errors ?? [], path)}`,
 			res.status,
 			path,
 			json.errors ?? [],

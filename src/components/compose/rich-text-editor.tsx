@@ -14,20 +14,22 @@ import {
 	Strikethrough,
 	Underline,
 } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Tooltip } from "@/components/ui/tooltip";
-import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
 import { cn } from "@/lib/utils";
 import { escapeHtml, hasMeaningfulHtml } from "./rich-text-utils";
+import { EmailHtmlRenderer } from "@/components/messages/email-html-renderer";
+import { sanitizeEmailHtml, sanitizeEditorHtml } from "@/lib/email/html";
 import type { RichTextEditorProps, ToolbarCommand } from "./rich-text-editor-types";
 
 const COMMANDS: ToolbarCommand[] = [
-	{ command: "bold", label: "Bold (⌘B)", icon: Bold },
-	{ command: "italic", label: "Italic (⌘I)", icon: Italic },
-	{ command: "underline", label: "Underline (⌘U)", icon: Underline },
-	{ command: "strikeThrough", label: "Strikethrough", icon: Strikethrough },
-	{ command: "insertUnorderedList", label: "Bulleted list", icon: List },
-	{ command: "insertOrderedList", label: "Numbered list", icon: ListOrdered },
-	{ command: "formatBlock", label: "Quote", icon: Quote, value: "blockquote" },
+	{ command: "bold", labelKey: "editor.bold", icon: Bold },
+	{ command: "italic", labelKey: "editor.italic", icon: Italic },
+	{ command: "underline", labelKey: "editor.underline", icon: Underline },
+	{ command: "strikeThrough", labelKey: "editor.strikethrough", icon: Strikethrough },
+	{ command: "insertUnorderedList", labelKey: "editor.bulletedList", icon: List },
+	{ command: "insertOrderedList", labelKey: "editor.numberedList", icon: ListOrdered },
+	{ command: "formatBlock", labelKey: "editor.quote", icon: Quote, value: "blockquote" },
 ];
 
 /**
@@ -49,6 +51,7 @@ export function RichTextEditor({
 	footerContent,
 	onEmbedImages,
 }: RichTextEditorProps) {
+	const { t } = useLanguage();
 	const editorRef = useRef<HTMLDivElement | null>(null);
 	const imageInput = useRef<HTMLInputElement | null>(null);
 	const [active, setActive] = useState<Record<string, boolean>>({});
@@ -60,7 +63,9 @@ export function RichTextEditor({
 	// Keep the DOM in step with the value without resetting the caret on every keystroke.
 	useEffect(() => {
 		const element = editorRef.current;
-		if (element && element.innerHTML !== value) element.innerHTML = value;
+		if (!element) return;
+		const safeValue = sanitizeEditorHtml(value);
+		if (element.innerHTML !== safeValue) element.innerHTML = safeValue;
 	}, [value]);
 
 	useEffect(() => {
@@ -82,7 +87,8 @@ export function RichTextEditor({
 	}, []);
 
 	function emit() {
-		onChange(editorRef.current?.innerHTML ?? "");
+		// Export validated original resource addresses, never the blocked preview placeholders.
+		onChange(sanitizeEmailHtml(editorRef.current?.innerHTML ?? "", { forOutgoing: true }) ?? "");
 	}
 
 	function run(command: string, commandValue?: string) {
@@ -206,7 +212,7 @@ export function RichTextEditor({
 					id={id}
 					role="textbox"
 					aria-multiline="true"
-					aria-label="Message body"
+					aria-label={t("editor.messageBody")}
 					contentEditable={!disabled}
 					suppressContentEditableWarning
 					data-placeholder={placeholder}
@@ -228,15 +234,12 @@ export function RichTextEditor({
 							onClick={() => setShowQuoted((open) => !open)}
 							aria-expanded={showQuoted}
 							className="rounded-full border border-neutral-200 bg-neutral-100 px-2 text-xs leading-5 text-neutral-500 hover:bg-neutral-200"
-							title={showQuoted ? "Hide quoted text" : "Show quoted text"}
+							title={showQuoted ? t("editor.hideQuoted") : t("editor.showQuoted")}
 						>
 							•••
 						</button>
 						{showQuoted && (
-							<div
-								className="email-body mt-2 max-w-none border-l-2 border-neutral-200 pl-3 text-sm text-neutral-600"
-								dangerouslySetInnerHTML={{ __html: quotedHtml }}
-							/>
+							<EmailHtmlRenderer className="mt-2" html={quotedHtml} preserveLeadingQuote />
 						)}
 					</div>
 				)}
@@ -245,10 +248,10 @@ export function RichTextEditor({
 			<div className="relative flex items-center gap-0.5 border-t border-neutral-100 px-4 py-3">
 				{toolbarStart}
 				{COMMANDS.map((item) => (
-					<Tooltip key={item.command} label={item.label}>
+					<Tooltip key={item.command} label={t(item.labelKey)}>
 						<button
 							type="button"
-							aria-label={item.label}
+							aria-label={t(item.labelKey)}
 							aria-pressed={!!active[item.command]}
 							disabled={disabled}
 							onMouseDown={(event) => event.preventDefault()}
@@ -262,10 +265,10 @@ export function RichTextEditor({
 						</button>
 					</Tooltip>
 				))}
-				<Tooltip label="Insert link (⌘K)">
+				<Tooltip label={t("editor.insertLinkHint")}>
 					<button
 						type="button"
-						aria-label="Insert link"
+						aria-label={t("editor.insertLink")}
 						disabled={disabled}
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={openLink}
@@ -275,10 +278,10 @@ export function RichTextEditor({
 					</button>
 				</Tooltip>
 				{onEmbedImages && (
-					<Tooltip label="Insert image">
+					<Tooltip label={t("editor.insertImage")}>
 						<button
 							type="button"
-							aria-label="Insert image"
+							aria-label={t("editor.insertImage")}
 							disabled={disabled}
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => imageInput.current?.click()}
@@ -288,10 +291,10 @@ export function RichTextEditor({
 						</button>
 					</Tooltip>
 				)}
-				<Tooltip label="Clear formatting">
+				<Tooltip label={t("editor.clearFormatting")}>
 					<button
 						type="button"
-						aria-label="Clear formatting"
+						aria-label={t("editor.clearFormatting")}
 						disabled={disabled}
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={() => run("removeFormat")}
@@ -334,7 +337,7 @@ export function RichTextEditor({
 							className="h-8 w-64 rounded-md border border-neutral-200 px-2 text-sm outline-none focus:border-blue-400"
 						/>
 						<button type="submit" className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-							Apply
+							{t("editor.apply")}
 						</button>
 					</form>
 				)}

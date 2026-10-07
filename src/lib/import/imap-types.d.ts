@@ -6,4 +6,6 @@ export type ImapImportInput = {
 	password: string;
 	folder: string;
 	limit: number;
+	/** Number of newest messages already imported by earlier batches. */
+	offset: number;
 };

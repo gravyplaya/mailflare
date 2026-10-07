@@ -1,3 +1,4 @@
+import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
 import type { InboxRule, InboxRuleInput, InboxRulesResponse, RuleFoldersResponse } from "./inbox-rules-types";
 
@@ -42,14 +43,14 @@ export async function deleteInboxRule(ruleId: string) {
 	if (!response.ok) throw new Error("Failed to delete rule");
 }
 
-export function getRuleFieldLabel(field: string): string {
-	if (field === "content") return "Content";
-	if (field === "title") return "Title";
-	return "Email address";
+export function getRuleFieldLabel(field: string, t: Translator = defaultTranslator): string {
+	if (field === "content") return t("rules.field.content");
+	if (field === "title") return t("rules.field.title");
+	return t("rules.field.email");
 }
 
-export function getRuleOperatorLabel(operator: string): string {
-	return operator === "exact" ? "exact match" : "contains";
+export function getRuleOperatorLabel(operator: string, t: Translator = defaultTranslator): string {
+	return operator === "exact" ? t("rules.operator.exact") : t("rules.operator.contains");
 }
 
 export function getInboxRuleDestination(rule: Pick<InboxRule, "action" | "folderId">): string {

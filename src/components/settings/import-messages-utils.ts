@@ -1,3 +1,4 @@
+import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { getAuthHeaders } from "@/lib/auth/client";
 import type { ImportMessagesResult, ImportProgressHandler } from "./import-messages-types";
 
@@ -35,7 +36,7 @@ export async function importMessageFiles(
 	});
 }
 
-export function getImportSummary(result: ImportMessagesResult | null): string {
+export function getImportSummary(result: ImportMessagesResult | null, t: Translator = defaultTranslator): string {
 	if (!result) return "";
-	return `${result.imported ?? 0} imported, ${result.skipped ?? 0} skipped`;
+	return t("import.summary", { imported: result.imported ?? 0, skipped: result.skipped ?? 0 });
 }

@@ -1,8 +1,9 @@
+import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import type { CalendarEvent, CalendarEventTimes, EventGroup, EventResizeEdge } from "./types";
 import type { FolderColor } from "@/lib/folders/types";
 import type { CalendarRepeat } from "@/lib/calendar/types";
 import { parseCalendarRepeatDays, parseExcludedOccurrences } from "@/lib/calendar/recurrence";
-import { dateFromZonedFields, formatUserDate, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
+import { dateFromZonedFields, formatUserDate, getDisplayLocale, formatUserDateTimeLocal, getUserTimeZone, parseUserDateTimeLocal, zonedDateFields } from "@/lib/time/utils";
 
 export const CALENDAR_START_HOUR = 0;
 export const CALENDAR_END_HOUR = 24;
@@ -182,7 +183,7 @@ export function currentTimePosition(value: Date): number {
 }
 
 export function formatHour(hour: number): string {
-  return new Date(2026, 0, 1, hour).toLocaleTimeString(undefined, { hour: "numeric" });
+  return new Date(2026, 0, 1, hour).toLocaleTimeString(getDisplayLocale(), { hour: "numeric" });
 }
 
 export function formatEventTime(value: Date): string {
@@ -196,7 +197,7 @@ export function formatEventRange(event: CalendarEvent): string {
   return `${formatEventTime(start)} – ${formatEventTime(end)}`;
 }
 
-export function groupUpcomingEvents(events: CalendarEvent[], today: Date): EventGroup[] {
+export function groupUpcomingEvents(events: CalendarEvent[], today: Date, t: Translator = defaultTranslator): EventGroup[] {
   const todayStart = startOfDay(today);
   const tomorrowStart = addDays(todayStart, 1);
   const groups: EventGroup[] = [];
@@ -206,9 +207,9 @@ export function groupUpcomingEvents(events: CalendarEvent[], today: Date): Event
     if (eventDate < todayStart) continue;
     const key = dateKey(eventDate);
     const label = key === dateKey(todayStart)
-      ? "Today"
+      ? t("calendar.today")
       : key === dateKey(tomorrowStart)
-        ? "Tomorrow"
+        ? t("calendar.tomorrow")
         : formatUserDate(eventDate, { month: "short", day: "numeric", year: "numeric" });
     const lastGroup = groups[groups.length - 1];
     if (lastGroup?.key === key) lastGroup.events.push(event);

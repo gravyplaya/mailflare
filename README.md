@@ -2,7 +2,7 @@
 
 # Mailflare
 
-Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare.
+Mailflare is a self-hosted email inbox for custom domains, built on Cloudflare. Supports **Resend**, or **AWS SES**
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hieunc229/mailflare)
 
@@ -23,46 +23,64 @@ Want to support the mailflare? <a target="_blank" href="https://store.paymug.co/
 
 ## What you can do
 
-- **Domain setup**: Connect domains and set up Cloudflare Email Routing from the dashboard.
-- **Mailboxes**: Create personal and shared mailboxes with delegated access.
-- **Email**: Send and receive email with attachments, rich formatting, signatures, and automatic replies.
-- **Inbox organization**: Organize mail with search, custom folders, stars, snoozing, archive, spam, and trash.
+- **Domains**: Connect your Cloudflare domains and choose Cloudflare, Resend, or Amazon SES for each.
+- **Mailboxes**: Create personal or shared mailboxes and give other people access to them.
+- **Email**: Send and receive mail with attachments, rich text, signatures, and automatic replies.
+- **Calendar**: Schedule repeating events with time zones and attendees, who receive email invitations.
+- **Booking pages**: Share a public link so anyone can book a free time on your calendar.
+- **Organization**: Keep your inbox tidy with search, folders, stars, snooze, archive, spam, and trash.
 - **Focus and triage**: Gatekeeper holds mail from new senders until you accept or block them, mute quiet threads, mark priority senders to pin their mail, mark emails as done, and set follow-up reminders when sending.
-- **Routing rules**: Create routing rules to store, forward, reject, or categorize incoming messages.
-- **Notifications**: Get real-time inbox updates and new-message notifications.
-- **Mail and contacts**: Import and export mail, manage contacts, and block unwanted senders.
-- **Administration**: Manage accounts, permissions, API keys, webhooks, audit logs, and database backups.
-- **Email AI Assistant**: Use an AI assistant to search mail, work with threads, and prepare drafts for a selected mailbox.
-- **MCP access**: Connect external AI clients through MCP with mailbox or admin permissions chosen for each key.
+- **Routing rules**: Store, forward, reject, or sort incoming mail automatically.
+- **Notifications**: Get live inbox updates and alerts when new mail arrives.
+- **Import, export, contacts**: Move mail in and out, manage contacts, and block unwanted senders.
+- **Admin**: Manage users, permissions, API keys, webhooks, audit logs, and backups.
+- **AI assistant**: Search your mail, draft replies, and manage calendar events with AI.
+- **MCP access**: Connect AI clients over MCP, with separate permissions for each key.
+- **Languages**: Use the interface in 33 languages: English, Português (Brasil), Português (Portugal), Español, Français, Deutsch, Italiano, Nederlands, Polski, Українська, Русский, Türkçe, 中文（简体）, 日本語, 한국어, Bahasa Indonesia, Bahasa Melayu, Tiếng Việt, ไทย, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, ಕನ್ನಡ, മലയാളം, ਪੰਜਾਬੀ, Kiswahili, Hausa, plus العربية, اردو and فارسی (right-to-left).
 
 ## How it works
 
-Mailflare runs in your Cloudflare account. Email Routing delivers incoming messages to the app, while Cloudflare's email service handles outgoing messages. Your mail data stays in your own D1 database and attachments are stored in your own R2 bucket.
+Mailflare runs in your Cloudflare account. By default, Cloudflare Email Routing delivers incoming mail to the app, and Cloudflare's email service sends outgoing mail. Each domain can also receive or send through Resend or Amazon SES. Cloudflare still manages the DNS.
 
-## How much does it cost?
+Your mail stays in your own D1 database, and attachments stay in your own R2 bucket, whichever provider you use. See [Sending and receiving providers](docs/providers.md).
 
-You can setup Mailflare and receive email for free
+## Cost
 
-A [Paid Worker](https://developers.cloudflare.com/workers/platform/pricing/) plan ($5/month) is required to send email (and it's recommend to have a smooth experience)
+**You can set up Mailflare, receive mail, and send mail for free.** Receiving with Cloudflare Email Routing is free. For sending, use the free tier of Resend or Amazon SES. Cloudflare's own email sending needs a paid Worker plan.
+
+| Send with | Free tier | After that |
+| --- | --- | --- |
+| **Resend** | 3,000 emails a month (100 a day), 3 domains | From $20/month for 50,000 emails |
+| **Amazon SES** | $200 AWS credit for new accounts (about 2 million emails). The free plan lasts 6 months and credits expire after 12. | $0.10 per 1,000 emails |
+| **Cloudflare Email Sending** | None | Needs a [Paid Worker](https://developers.cloudflare.com/workers/platform/pricing/) plan ($5/month) |
+
+Receiving costs:
+
+- Cloudflare Email Routing: free.
+- Resend: included in every plan.
+- Amazon SES: $0.10 per 1,000 messages, plus small S3 and SNS charges.
+
+New SES accounts start in a sandbox that only delivers to verified addresses. Request production access in the AWS console to lift this.
+
+You choose the provider per domain and can switch anytime (see [Sending and receiving providers](docs/providers.md)). Prices change, so check [Resend](https://resend.com/pricing), [Amazon SES](https://aws.amazon.com/ses/pricing/), and [Cloudflare](https://developers.cloudflare.com/workers/platform/pricing/) first.
 
 ## Deploy
 
-Getting started takes three steps:
+1. **Deploy the app.** Click **Deploy to Cloudflare**. Keep the app name `mailflare`. Other Worker names will break the app.
+2. **Finish setup.** Open the deployed app and follow `/setup` to check the install and create your admin account.
+3. **Connect a domain.** Add a domain from the same Cloudflare account and choose which service receives its mail. Mailflare sets up Email Routing, or guides you through Resend or Amazon SES. Then create your first mailbox. Add Resend or AWS credentials on the domain page when you need them.
 
-1. **Deploy the app.** Click **Deploy to Cloudflare** and keep the app name as `mailflare`. The app will not work correctly under another Worker name.
-2. **Complete setup.** Open the deployed app and follow `/setup` to check the installation and create your admin account.
-3. **Connect your domain.** Add a domain managed by the same Cloudflare account. Mailflare configures its email routing and helps you create the first mailbox.
+⚠️ **`CF_TOKEN` is required during deployment.** Create a scoped [Cloudflare API token with these permissions](https://github.com/hieunc229/mailflare/issues/24#issuecomment-5523686105) for the domains you want to connect:
 
-⚠️ IMPORTANT: **`CF_TOKEN` is required during deployment**. Create a scoped [Cloudflare API token with the following permissions](https://github.com/hieunc229/mailflare/issues/24#issuecomment-5523686105) for the domains you want to connect.
-- All accounts - Email Sending:Edit, DNS Settings:Edit, Email Routing Addresses:Edit
-- All zones - DNS Settings:Edit, Email Routing Rules:Edit, Zone Settings:Edit, DNS:Edit
+- All accounts: Email Sending:Edit, DNS Settings:Edit, Email Routing Addresses:Edit
+- All zones: DNS Settings:Edit, Email Routing Rules:Edit, Zone Settings:Edit, DNS:Edit
 
 ### Deploy with an AI coding agent
 
-You can paste the prompt below into an agent that has terminal access. Give it the Cloudflare account ID and **two separate scoped API tokens** through the agent's secret input, not in a public chat, repository, or committed file:
+Paste the prompt below into an agent with terminal access. Give it your Cloudflare account ID and **two separate scoped API tokens** through the agent's secret input. Never put them in a public chat, repository, or committed file.
 
-- **Deployment token** (used locally by Wrangler as `CLOUDFLARE_API_TOKEN`): scope it to the target account with **Workers Scripts Edit** (or **Workers Admin** if Cloudflare's newer granular roles are shown, since this is a new Worker), **D1 Edit**, **Workers R2 Storage Edit**, **Queues Edit**, and **Account Settings Read**. Add **Workers Routes Edit** for the target zone only if you want the agent to attach a custom domain or route. See Cloudflare's [token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and [Workers roles](https://developers.cloudflare.com/workers/authorization/workers/).
-- **Runtime token** (stored as the Worker's `CF_TOKEN` secret): use the domain permissions listed above. Add **Email Sending Edit** if you want to send mail. This token is separate from the deployment token and must cover the zones you will connect in Mailflare.
+- **Deployment token** (Wrangler uses it as `CLOUDFLARE_API_TOKEN`): scope it to the target account with **Workers Scripts Edit** (or **Workers Admin** if you see Cloudflare's newer roles), **D1 Edit**, **Workers R2 Storage Edit**, **Queues Edit**, and **Account Settings Read**. Add **Workers Routes Edit** for the target zone only if the agent should attach a custom domain or route. See Cloudflare's [token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and [Workers roles](https://developers.cloudflare.com/workers/authorization/workers/).
+- **Runtime token** (stored as the Worker secret `CF_TOKEN`): use the domain permissions above. Add **Email Sending Edit** to send mail. It must cover the zones you will connect in Mailflare.
 
 ```text
 Install Mailflare from https://github.com/hieunc229/mailflare in my Cloudflare account.
@@ -83,11 +101,14 @@ Give me the deployed URL and any remaining Cloudflare account actions. I will
 open /setup, create the first admin account, and connect my domain there.
 ```
 
-See the [deployment guide](docs/deployment.md) for required permissions, manual deployment, backups, and updates.
+See the [deployment guide](docs/deployment.md) for permissions, manual deployment, backups, and updates.
 
-### Self-host with Docker instead
+### Self-host with Docker
 
-Mailflare also runs as one container on any server, with SQLite and local files in place of D1 and R2, a built-in SMTP listener for inbound mail (or a small Cloudflare relay Worker if you want to keep MX on Cloudflare), and any SMTP relay or Cloudflare Email Sending for outbound.
+Mailflare also runs as one container on any server. It uses SQLite and local files instead of D1 and R2.
+
+- **Inbound mail**: a built-in SMTP listener, or a small Cloudflare relay Worker if you want to keep MX on Cloudflare.
+- **Outbound mail**: any SMTP relay, Cloudflare Email Sending, Resend, or Amazon SES.
 
 ```bash
 cp .env.docker.example .env.docker
@@ -105,16 +126,27 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Add your Cloudflare credentials to `.dev.vars`, then open [http://localhost:3000](http://localhost:3000). For sample local data, run `npm run db:seed` while the development server is running.
+Add your Cloudflare credentials to `.dev.vars`, then open [http://localhost:3000](http://localhost:3000). To load sample data, run `npm run db:seed` while the dev server is running.
 
-The Cloudflare app uses vinext and the Cloudflare Vite plugin, including local D1, R2, Queues, and Durable Objects. Remote bindings are disabled by default. To use Workers AI locally, authenticate with Wrangler, select your account with `CLOUDFLARE_ACCOUNT_ID`, and run `CLOUDFLARE_REMOTE_BINDINGS=true npm run dev`.
+The Cloudflare app uses vinext and the Cloudflare Vite plugin, with local D1, R2, Queues, and Durable Objects. Remote bindings are off by default. To use Workers AI locally, log in with Wrangler, set `CLOUDFLARE_ACCOUNT_ID`, and run `CLOUDFLARE_REMOTE_BINDINGS=true npm run dev`.
 
-`npm run build` builds the complete Worker; `npm run start` previews that build locally. `npm run deploy` builds and deploys it. The separate Node/Docker runtime still uses Next.js and the existing `build:node`, `start:node`, and `dev:node` commands.
+- `npm run build`: build the full Worker.
+- `npm run start`: preview that build locally.
+- `npm run deploy`: build and deploy.
+
+The Node/Docker runtime still uses Next.js with `build:node`, `start:node`, and `dev:node`.
+
+## Languages
+
+Everyone can switch language from the homepage or sign-in page, and signed-in users can set it under **Settings → Account → General**, next to their time zone. The choice is kept in a cookie, so server-rendered pages use it too.
+
+To add a language, create a catalog next to `src/lib/i18n/en.json` with the same keys, then register it in `src/lib/i18n/locales.ts` with its native name (add `dir: "rtl"` for right-to-left scripts). The selector, validation, and cookie handling pick it up from that registry. Missing keys fall back to English. English ships in the main bundle; other catalogs load on demand.
 
 ## Documentation
 
 - [Deployment and configuration](docs/deployment.md)
-- [API and integrations](docs/api.md)
+- [Sending and receiving providers (Cloudflare, Resend, Amazon SES)](docs/providers.md)
+- [API and integrations](docs/api.md), including the [calendar and booking APIs](docs/api.md#calendar-and-booking)
 - [Email assistant and MCP](docs/email-assistant-and-mcp.md)
 - [Troubleshooting](docs/troubleshooting.md)
 

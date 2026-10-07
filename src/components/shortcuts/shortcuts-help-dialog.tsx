@@ -2,6 +2,8 @@
 
 import React from "react";
 import { X, Keyboard } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
+import type { TranslationKey } from "@/lib/i18n/types";
 import type { ShortcutDefinition } from "./types";
 
 interface ShortcutsHelpDialogProps {
@@ -10,11 +12,24 @@ interface ShortcutsHelpDialogProps {
   shortcuts: ShortcutDefinition[];
 }
 
+// Puts a styled key badge where the translation has its {key} placeholder.
+function withKey(text: string, key: string) {
+  const [before, after = ""] = text.split("{key}");
+  return (
+    <>
+      {before}
+      <kbd className="px-1.5 py-0.5 bg-neutral-200 text-neutral-700 rounded font-mono">{key}</kbd>
+      {after}
+    </>
+  );
+}
+
 export function ShortcutsHelpDialog({
   isOpen,
   onClose,
   shortcuts,
 }: ShortcutsHelpDialogProps) {
+  const { t } = useLanguage();
   if (!isOpen) return null;
 
   const grouped = shortcuts.reduce((acc, item) => {
@@ -27,7 +42,7 @@ export function ShortcutsHelpDialog({
     const parts: string[] = [];
     if (shortcut.modifiers) {
       shortcut.modifiers.forEach((m) => {
-        if (m === "ctrl") parts.push("Ctrl");
+        if (m === "ctrl") parts.push(t("shortcutsHelp.ctrl"));
         if (m === "meta") parts.push("⌘");
         if (m === "alt") parts.push("Alt");
         if (m === "shift") parts.push("Shift");
@@ -53,16 +68,17 @@ export function ShortcutsHelpDialog({
             </div>
             <div>
               <h2 className="text-base font-semibold text-neutral-900">
-                Keyboard Shortcuts
+                {t("shortcutsHelp.title")}
               </h2>
               <p className="text-xs text-neutral-400">
-                Superhuman &amp; Gmail style quick keys
+                {t("shortcutsHelp.subtitle")}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("shortcutsHelp.close")}
             className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-lg hover:bg-neutral-100 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -74,7 +90,7 @@ export function ShortcutsHelpDialog({
           {Object.entries(grouped).map(([category, items]) => (
             <div key={category} className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 pb-1.5">
-                {category}
+                {t(`shortcut.category.${category}` as TranslationKey)}
               </h3>
               <div className="space-y-2">
                 {items.map((item, idx) => (
@@ -97,20 +113,8 @@ export function ShortcutsHelpDialog({
 
         {/* Footer */}
         <div className="px-6 py-3 bg-neutral-50 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
-          <span>
-            Press{" "}
-            <kbd className="px-1.5 py-0.5 bg-neutral-200 text-neutral-700 rounded font-mono">
-              ?
-            </kbd>{" "}
-            to toggle
-          </span>
-          <span>
-            Press{" "}
-            <kbd className="px-1.5 py-0.5 bg-neutral-200 text-neutral-700 rounded font-mono">
-              ESC
-            </kbd>{" "}
-            to close
-          </span>
+          <span>{withKey(t("shortcutsHelp.pressToToggle", { key: "{key}" }), "?")}</span>
+          <span>{withKey(t("shortcutsHelp.pressToClose", { key: "{key}" }), "ESC")}</span>
         </div>
       </div>
     </div>

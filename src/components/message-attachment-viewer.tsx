@@ -10,6 +10,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { useLanguage } from "@/components/language-provider";
 import { authFetch } from "@/lib/auth/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MessageAttachmentViewerProps } from "./message-attachment-viewer-types";
@@ -24,6 +25,7 @@ export function MessageAttachmentViewer({
 	onOpenChange,
 	open,
 }: MessageAttachmentViewerProps) {
+	const { t } = useLanguage();
 	const [textContent, setTextContent] = useState("");
 	const [textError, setTextError] = useState("");
 
@@ -43,20 +45,20 @@ export function MessageAttachmentViewer({
 
 		authFetch(previewUrl)
 			.then(async (response) => {
-				if (!response.ok) throw new Error("Could not load this attachment");
+				if (!response.ok) throw new Error(t("attachment.loadFailed"));
 				const content = await response.text();
 				if (!cancelled) setTextContent(content);
 			})
 			.catch((error) => {
 				if (!cancelled) {
-					setTextError(error instanceof Error ? error.message : "Could not load this attachment");
+					setTextError(error instanceof Error ? error.message : t("attachment.loadFailed"));
 				}
 			});
 
 		return () => {
 			cancelled = true;
 		};
-	}, [attachment, open, previewKind, previewUrl]);
+	}, [attachment, open, previewKind, previewUrl, t]);
 
 	if (!attachment) return null;
 
@@ -106,7 +108,7 @@ export function MessageAttachmentViewer({
 						<div className="flex flex-col items-center gap-3 px-6 text-center">
 							<FileWarning className="h-10 w-10 text-neutral-400" />
 							<p className="text-sm text-neutral-600">
-								This file type cannot be previewed safely in the browser.
+								{t("attachment.unsupported")}
 							</p>
 						</div>
 					)}
@@ -116,7 +118,7 @@ export function MessageAttachmentViewer({
 					<Button asChild>
 						<a href={downloadUrl} download={attachment.filename}>
 							<ArrowDownToLine className="h-4 w-4" />
-							Download
+							{t("attachment.download")}
 						</a>
 					</Button>
 				</div>

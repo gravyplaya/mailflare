@@ -1,12 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains } from "@/db/schema";
-import {
-	createSendingSubdomain,
-	enableEmailRouting,
-	getZone,
-	listSendingSubdomains,
-} from "@/lib/cloudflare-api";
+import { enableEmailRouting, getZone } from "@/lib/cloudflare-api";
 import { createDnsRecord, listDnsRecords } from "@/lib/cloudflare-dns";
 import { ensureEmailRoutingCatchAllToWorker } from "@/lib/domains/catch-all-routing";
 import type { DnsAuthRecord } from "@/lib/domains/dns-audit";
@@ -14,7 +9,7 @@ import {
 	isManualZone,
 	shouldBindEmailCatchAllToWorker,
 } from "@/lib/domains/provision";
-import { findSendingSubdomain } from "@/lib/domains/sending-status";
+import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 import type { DomainRow } from "@/lib/domains/types";
 import { isZoneApex } from "@/lib/domains/utils";
 
@@ -23,12 +18,14 @@ import { isZoneApex } from "@/lib/domains/utils";
  * mechanisms domain creation uses: MX/SPF come from enabling Email Routing,
  * DKIM from a sending subdomain, and DMARC is a hand-written TXT since
  * Cloudflare does not create one for the domain. Idempotent, so a click on a
- * record that already exists is a no-op.
+ * record that already exists is a no-op. DKIM throws MxConflictError when another
+ * service's MX records block the sending subdomain, unless `replaceMx` is set.
  */
 export async function setupDomainDnsRecord(
 	env: CloudflareEnv,
 	domain: DomainRow,
 	record: DnsAuthRecord,
+	options: { replaceMx?: boolean } = {},
 ): Promise<void> {
 	if (isManualZone(domain.zoneId)) {
 		throw new Error("DNS for this domain is managed manually");
@@ -56,10 +53,9 @@ export async function setupDomainDnsRecord(
 			// The stored tag can be stale or empty even though the subdomain exists
 			// on Cloudflare, so reuse what is there instead of creating a duplicate
 			// (which Cloudflare rejects with "Subdomain already exists").
-			const subdomains = await listSendingSubdomains(env, domain.zoneId);
-			const subdomain =
-				findSendingSubdomain(domain.hostname, subdomains) ??
-				(await createSendingSubdomain(env, domain.zoneId, domain.hostname));
+			const { subdomain } = await ensureSendingSubdomain(env, domain.zoneId, domain.hostname, {
+				replaceMx: options.replaceMx,
+			});
 			await getDb(env)
 				.update(domains)
 				.set({

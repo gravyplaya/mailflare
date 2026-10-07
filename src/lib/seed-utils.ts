@@ -232,7 +232,15 @@ export async function ensureDemoUser(env: CloudflareEnv) {
 		.from(users)
 		.where(eq(users.email, demoCredentials.email))
 		.limit(1);
-	if (existing) return existing;
+	const [admin] = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin")).limit(1);
+	if (existing) {
+		// Repair demos seeded before the login page required an admin account.
+		if (!admin) {
+			await db.update(users).set({ role: "admin", isPrimaryAdmin: true }).where(eq(users.id, existing.id));
+			return { ...existing, role: "admin" as const, isPrimaryAdmin: true };
+		}
+		return existing;
+	}
 
 	const id = newId("usr");
 	await db.insert(users).values({
@@ -240,6 +248,8 @@ export async function ensureDemoUser(env: CloudflareEnv) {
 		email: demoCredentials.email,
 		passwordHash: hashPassword(demoCredentials.password),
 		name: "Demo User",
+		role: admin ? "user" : "admin",
+		isPrimaryAdmin: !admin,
 	});
 	await ensureBookingUsername(env, id, demoCredentials.email);
 
@@ -265,6 +275,7 @@ export async function ensureDemoDomain(env: CloudflareEnv, userId: string) {
 		status: "active",
 		routingEnabled: true,
 		sendingRequested: true,
+		sendingProvider: "cloudflare" as const,
 		sendingEnabled: true,
 	});
 

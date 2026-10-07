@@ -15,6 +15,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import { Select } from "@/components/ui/select";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { BACKUP_TABLE_GROUPS } from "@/lib/backups/table-groups";
+import type { TranslationKey } from "@/lib/i18n/types";
 import type { BackupItem, BackupSettings } from "./types";
 import {
   WEEKDAYS,
@@ -46,6 +48,7 @@ import {
 } from "./utils";
 
 export default function BackupsPage() {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const restoreInput = useRef<HTMLInputElement | null>(null);
   const savedSettings = useRef<BackupSettings | null>(null);
@@ -115,11 +118,11 @@ export default function BackupsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-medium text-neutral-900">
-            Database Backups
+          <h1 className="text-2xl md:text-3xl font-medium text-neutral-900">
+            {t("backups.title")}
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Export database records and store them in the configured R2 bucket.
+            {t("backups.description")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -131,17 +134,17 @@ export default function BackupsPage() {
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
-              if (!file || !window.confirm("Restore this backup? This replaces all current database records and may sign you out.")) return;
+              if (!file || !window.confirm(t("backups.restoreConfirm"))) return;
               restore.mutate(file);
             }}
           />
           <Button onClick={() => runBackup.mutate()} disabled={runBackup.isPending || !backupConfigured}>
             <Play size={18} />
-            {runBackup.isPending ? "Starting..." : "Back up"}
+            {runBackup.isPending ? t("backups.starting") : t("backups.backUp")}
           </Button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <Button type="button" variant="outline" className="h-10 w-10 px-0" aria-label="Backup actions">
+              <Button type="button" variant="outline" className="h-10 w-10 px-0" aria-label={t("backups.actions")}>
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenu.Trigger>
@@ -149,11 +152,11 @@ export default function BackupsPage() {
               <DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-48 rounded-lg border border-neutral-200 bg-white p-1 text-sm shadow-lg">
                 <DropdownMenu.Item disabled={restore.isPending} onSelect={() => restoreInput.current?.click()} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
                   <Upload className="h-4 w-4" />
-                  {restore.isPending ? "Restoring..." : "Restore from backup"}
+                  {restore.isPending ? t("backups.restoring") : t("backups.restore")}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item disabled={!settings || autoSaveSettings.isPending} onSelect={() => setSettingsOpen(true)} className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-neutral-900 outline-none hover:bg-neutral-100 focus:bg-neutral-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50">
                   <Settings className="h-4 w-4" />
-                  Settings
+                  {t("backups.settings")}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -164,8 +167,8 @@ export default function BackupsPage() {
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Tables to back up</DialogTitle>
-            <DialogDescription>Choose related groups of tables for manual and automatic backups. All groups are enabled by default. Restore requires a backup containing every group.</DialogDescription>
+            <DialogTitle>{t("backups.tablesTitle")}</DialogTitle>
+            <DialogDescription>{t("backups.tablesDescription")}</DialogDescription>
           </DialogHeader>
           {settings && <div className="space-y-5">
             <div className="divide-y divide-neutral-100">
@@ -173,20 +176,20 @@ export default function BackupsPage() {
                 const enabled = !settings.excludedTableGroups.includes(group.id);
                 const lastEnabled = enabled && settings.excludedTableGroups.length === BACKUP_TABLE_GROUPS.length - 1;
                 return <div key={group.id} className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
-                  <div className="min-w-0"><p className="text-sm font-medium text-neutral-900">{group.label}</p><p className="mt-1 break-words text-xs text-neutral-500">Tables: {group.tables.join(", ")}</p></div>
-                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setSettings({ ...settings, excludedTableGroups: checked ? settings.excludedTableGroups.filter((id) => id !== group.id) : [...settings.excludedTableGroups, group.id] })} aria-label={`Back up ${group.label}`} />
+                  <div className="min-w-0"><p className="text-sm font-medium text-neutral-900">{group.label}</p><p className="mt-1 break-words text-xs text-neutral-500">{t("backups.tables", { list: group.tables.join(", ") })}</p></div>
+                  <Switch checked={enabled} disabled={lastEnabled} onCheckedChange={(checked) => setSettings({ ...settings, excludedTableGroups: checked ? settings.excludedTableGroups.filter((id) => id !== group.id) : [...settings.excludedTableGroups, group.id] })} aria-label={t("backups.backUpGroup", { group: group.label })} />
                 </div>;
               })}
             </div>
-            {saveSettings.error && <p className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : "Failed to save backup settings"}</p>}
-            <Button onClick={() => saveSettings.mutate(settings)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? "Saving..." : "Save settings"}</Button>
+            {saveSettings.error && <p className="text-sm text-red-700">{saveSettings.error instanceof Error ? saveSettings.error.message : t("backups.saveSettingsFailed")}</p>}
+            <Button onClick={() => saveSettings.mutate(settings)} disabled={saveSettings.isPending}><Save className="h-4 w-4" />{saveSettings.isPending ? t("common.saving") : t("backups.saveSettings")}</Button>
           </div>}
         </DialogContent>
       </Dialog>
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error instanceof Error ? error.message : "Backup operation failed"}
+          {error instanceof Error ? error.message : t("backups.operationFailed")}
         </p>
       )}
 
@@ -197,12 +200,10 @@ export default function BackupsPage() {
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
               <div>
                 <CardTitle className="text-amber-950">
-                  Complete backup setup
+                  {t("backups.setupTitle")}
                 </CardTitle>
                 <CardDescription className="mt-1 text-amber-800">
-                  Add the missing values under the deployed Worker&apos;s
-                  Variables and Secrets settings. This check disappears after
-                  backup configuration is complete.
+                  {t("backups.setupDescription")}
                 </CardDescription>
               </div>
             </div>
@@ -229,7 +230,7 @@ export default function BackupsPage() {
                 <RefreshCw
                   className={`h-4 w-4 ${backups.isFetching ? "animate-spin" : ""}`}
                 />
-                Check again
+                {t("backups.checkAgain")}
               </Button>
             </div>
           </CardContent>
@@ -238,17 +239,16 @@ export default function BackupsPage() {
 
       <Card className="rounded-3xl border-0 bg-white p-6">
         <CardHeader className="py-0">
-          <CardTitle>Automatic backup</CardTitle>
+          <CardTitle>{t("backups.automatic")}</CardTitle>
           <CardDescription>
-            The schedule runs at 02:00 UTC. Monthly schedules are limited to
-            days 1-28.
+            {t("backups.scheduleNote")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">
           {settings && (
             <>
               <div className="flex items-center justify-between gap-4 border-t border-neutral-100 pt-5">
-                <Label htmlFor="automatic-backup-switch">Enable Automatic backup</Label>
+                <Label htmlFor="automatic-backup-switch">{t("backups.enableAutomatic")}</Label>
                 <Switch
                   id="automatic-backup-switch"
                   checked={settings.enabled}
@@ -260,7 +260,7 @@ export default function BackupsPage() {
                 <>
                   <div className="grid gap-4">
                     <div className="flex items-center justify-between gap-4">
-                      <Label htmlFor="schedule-type" className="flex-1">Frequency</Label>
+                      <Label htmlFor="schedule-type" className="flex-1">{t("backups.frequency")}</Label>
                       <Select
                         id="schedule-type"
                         value={settings.scheduleType}
@@ -282,15 +282,15 @@ export default function BackupsPage() {
                         }}
                         className="px-3 py-2"
                       >
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Selected day of week</option>
-                        <option value="monthly">Selected day of month</option>
+                        <option value="daily">{t("backups.daily")}</option>
+                        <option value="weekly">{t("backups.weekly")}</option>
+                        <option value="monthly">{t("backups.monthly")}</option>
                       </Select>
                     </div>
 
                     {settings.scheduleType === "weekly" && (
                       <div className="flex items-center justify-between gap-4">
-                        <Label htmlFor="weekday">Day of week</Label>
+                        <Label htmlFor="weekday">{t("backups.dayOfWeek")}</Label>
                         <Select
                           id="weekday"
                           value={settings.scheduleValue ?? 1}
@@ -307,7 +307,7 @@ export default function BackupsPage() {
                         >
                           {WEEKDAYS.map((day) => (
                             <option key={day.value} value={day.value}>
-                              {day.label}
+                              {t(day.labelKey)}
                             </option>
                           ))}
                         </Select>
@@ -316,7 +316,7 @@ export default function BackupsPage() {
 
                     {settings.scheduleType === "monthly" && (
                       <div className="flex items-center justify-between gap-4">
-                        <Label htmlFor="month-day">Day of month</Label>
+                        <Label htmlFor="month-day">{t("backups.dayOfMonth")}</Label>
                         <Input
                           id="month-day"
                           className="w-1/2 max-w-52 shrink-0"
@@ -342,7 +342,7 @@ export default function BackupsPage() {
 
                   <div className="grid gap-4 border-t border-neutral-100 pt-5">
                     <div className="flex items-center justify-between gap-4">
-                      <Label htmlFor="retention-switch">Delete old backups automatically</Label>
+                      <Label htmlFor="retention-switch">{t("backups.deleteOld")}</Label>
                       <Switch
                         id="retention-switch"
                         checked={settings.retentionEnabled}
@@ -358,7 +358,7 @@ export default function BackupsPage() {
 
                     <div className="flex items-center justify-between gap-4">
                       <Label htmlFor="retention-days">
-                        Delete backups older than
+                        {t("backups.deleteOlderThan")}
                       </Label>
                       <div className="flex w-1/2 max-w-52 shrink-0 items-center gap-2 relative">
                         <Input
@@ -380,7 +380,7 @@ export default function BackupsPage() {
                             else setSettings({ ...settings, retentionDays: savedSettings.current?.retentionDays ?? 30 });
                           }}
                         />
-                        <span className="text-sm text-neutral-500 absolute z-10 right-6">days</span>
+                        <span className="text-sm text-neutral-500 absolute z-10 right-6">{t("backups.days")}</span>
                       </div>
                     </div>
                   </div>
@@ -394,18 +394,18 @@ export default function BackupsPage() {
       <section className="overflow-hidden rounded-3xl bg-white">
         <div className="flex items-center gap-3 border-b border-neutral-100 px-4 py-4">
           <DatabaseBackup className="h-5 w-5 text-neutral-500" />
-          <h2 className="font-semibold text-neutral-900">Backup history</h2>
+          <h2 className="font-semibold text-neutral-900">{t("backups.history")}</h2>
         </div>
         <div className="grid grid-cols-[1fr_110px_110px_170px_120px] gap-4 border-b border-neutral-100 bg-neutral-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          <span>File</span>
-          <span>Status</span>
-          <span>Size</span>
-          <span>Created</span>
-          <span>Actions</span>
+          <span>{t("backups.col.file")}</span>
+          <span>{t("backups.col.status")}</span>
+          <span>{t("backups.col.size")}</span>
+          <span>{t("backups.col.created")}</span>
+          <span>{t("backups.col.actions")}</span>
         </div>
         {backups.isLoading && <SkeletonRows count={5} />}
         {!backups.isLoading && (backups.data?.backups ?? []).length === 0 && (
-          <p className="px-4 py-6 text-sm text-neutral-500">No backups yet.</p>
+          <p className="px-4 py-6 text-sm text-neutral-500">{t("backups.none")}</p>
         )}
         {(backups.data?.backups ?? []).map((backup: BackupItem) => (
           <div
@@ -417,12 +417,12 @@ export default function BackupsPage() {
                 {backup.filename ?? backup.id}
               </p>
               <p className="truncate text-xs text-neutral-500">
-                {backup.trigger === "manual" ? "Manual" : "Scheduled"}
+                {backup.trigger === "manual" ? t("backups.manual") : t("backups.scheduled")}
                 {backup.error ? `: ${backup.error}` : ""}
               </p>
             </div>
             <Badge variant="outline" className={getStatusClass(backup.status)}>
-              {backup.status}
+              {t(`backups.status.${backup.status}` as TranslationKey)}
             </Badge>
             <span className="text-sm text-neutral-600">
               {formatBackupSize(backup.size)}
@@ -434,7 +434,7 @@ export default function BackupsPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                title="Download backup"
+                title={t("backups.download")}
                 disabled={backup.status !== "completed" || download.isPending}
                 onClick={() => download.mutate(backup)}
               >
@@ -443,7 +443,7 @@ export default function BackupsPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                title="Delete backup"
+                title={t("backups.delete")}
                 disabled={
                   deleteBackup.isPending ||
                   backup.status === "queued" ||

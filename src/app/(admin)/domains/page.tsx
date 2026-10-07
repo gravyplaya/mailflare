@@ -1,7 +1,9 @@
 "use client";
 
+import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,16 +15,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { List } from "@/components/ui/list";
 import { CheckCircle2, LoaderCircle, Plus } from "lucide-react";
 import { authFetch } from "@/lib/auth/client";
-import type { DnsAuthRecord, DnsStatusSummary, Domain, DomainDnsCache, DomainDnsView, DomainPreflight } from "./types";
+import type { DnsAuthRecord, DnsStatusSummary, Domain, DomainDnsCache, DomainDnsView, DomainPreflight, ReceivingProvider, SendingProvider } from "./types";
 import DomainItemCard from "./DomainItemCard";
 import { SectionRowSkeleton } from "@/components/page-skeletons";
 import { checkDomain } from "./utils";
+import { confirmMxReplacement } from "./api";
 
 export default function DomainsPage() {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const [hostname, setHostname] = useState("");
   // Self-hosted installs without Cloudflare credentials manage DNS by hand.
@@ -33,7 +36,8 @@ export default function DomainsPage() {
   const managesDns = me?.managesDns ?? true;
   const [domainCheck, setDomainCheck] = useState<DomainPreflight | null>(null);
   const [domainChecking, setDomainChecking] = useState(false);
-  const [enableSending, setEnableSending] = useState(false);
+  const [sendingProvider, setSendingProvider] = useState<SendingProvider>("cloudflare");
+  const [receivingProvider, setReceivingProvider] = useState<ReceivingProvider>("cloudflare");
   const [domainCheckError, setDomainCheckError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [setupRecord, setSetupRecord] = useState<DnsAuthRecord | null>(null);
@@ -59,18 +63,15 @@ export default function DomainsPage() {
     mutationFn: async () => {
       const normalized = hostname.toLowerCase().trim();
       let checkedDomain = domainCheck;
-      let sendingRequested = enableSending;
       if (checkedDomain?.hostname !== normalized) {
         const result = await checkDomain(normalized);
         if (!result.ok || !result.domain) {
-          throw new Error(result.error ?? "Domain check failed");
+          throw new Error(result.error ?? t("onboarding.domainCheckFailed"));
         }
         checkedDomain = result.domain;
-        sendingRequested = true;
         setDomainCheck(result.domain);
-        setEnableSending(sendingRequested);
       }
-      if (!checkedDomain) throw new Error("Domain check failed");
+      if (!checkedDomain) throw new Error(t("onboarding.domainCheckFailed"));
 
       const res = await authFetch("/api/domains", {
         method: "POST",
@@ -78,17 +79,19 @@ export default function DomainsPage() {
         body: JSON.stringify({
           hostname: checkedDomain.hostname,
           enableRouting: true,
-          enableSending: sendingRequested,
+          sendingProvider,
+          receivingProvider,
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed");
+      if (!res.ok) throw new Error(json.error ?? t("mailboxes.failed"));
       return json;
     },
     onSuccess: () => {
       setHostname("");
       setDomainCheck(null);
-      setEnableSending(false);
+      setSendingProvider("cloudflare");
+      setReceivingProvider("cloudflare");
       setDomainCheckError(null);
       setCreateOpen(false);
       qc.invalidateQueries({ queryKey: ["domains"] });
@@ -98,7 +101,7 @@ export default function DomainsPage() {
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const res = await authFetch(`/api/domains/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to remove");
+      if (!res.ok) throw new Error(t("domains.removeFailed"));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["domains"] }),
   });
@@ -111,7 +114,7 @@ export default function DomainsPage() {
       error?: string;
     };
     if (!res.ok || !json.domain || !json.dns) {
-      throw new Error(json.error ?? "Failed to load DNS");
+      throw new Error(json.error ?? t("domains.dnsLoadFailed"));
     }
     const loadedView = { domain: json.domain, dns: json.dns };
     setDnsViews((current) => ({ ...current, [id]: loadedView }));
@@ -142,11 +145,73 @@ export default function DomainsPage() {
       await loadDns(id);
     } catch (error) {
       if (expandedIdRef.current === id) {
-        setDnsError(error instanceof Error ? error.message : "Failed to load DNS");
+        setDnsError(error instanceof Error ? error.message : t("domains.dnsLoadFailed"));
       }
     } finally {
       if (expandedIdRef.current === id) setDnsLoading(false);
     }
+  };
+
+  const [sendingBusy, setSendingBusy] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState<string | null>(null);
+
+  const changeSendingProvider = async (provider: SendingProvider) => {
+    if (!expandedDomainId) return;
+    const id = expandedDomainId;
+    setSendingBusy(true);
+    setSendingMessage(null);
+    try {
+      const put = async (replaceMx: boolean) => {
+        const res = await authFetch(`/api/domains/${id}/sending`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, replaceMx }),
+        });
+        return { res, json: (await res.json()) as { warning?: string; error?: string; code?: string; records?: { content: string; priority: number }[] } };
+      };
+      let { res, json } = await put(false);
+      // Cloudflare sending refuses while another service's MX records exist.
+      if (confirmMxReplacement(res, json)) ({ res, json } = await put(true));
+      if (!res.ok) throw new Error(json.error ?? t("domains.sendingChangeFailed"));
+      if (json.warning) setSendingMessage(json.warning);
+      await loadDns(id);
+      qc.invalidateQueries({ queryKey: ["domains"] });
+    } catch (error) {
+      setSendingMessage(error instanceof Error ? error.message : t("domains.sendingChangeFailed"));
+    } finally {
+      setSendingBusy(false);
+    }
+  };
+
+  const [receivingBusy, setReceivingBusy] = useState(false);
+  const [receivingMessage, setReceivingMessage] = useState<string | null>(null);
+
+  const changeReceivingProvider = async (provider: ReceivingProvider) => {
+    if (!expandedDomainId) return;
+    const id = expandedDomainId;
+    setReceivingBusy(true);
+    setReceivingMessage(null);
+    try {
+      const res = await authFetch(`/api/domains/${id}/receiving`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? t("domains.receivingChangeFailed"));
+      await loadDns(id);
+      qc.invalidateQueries({ queryKey: ["domains"] });
+    } catch (error) {
+      setReceivingMessage(error instanceof Error ? error.message : t("domains.receivingChangeFailed"));
+    } finally {
+      setReceivingBusy(false);
+    }
+  };
+
+  const refreshExpandedDns = () => {
+    if (!expandedDomainId) return;
+    void loadDns(expandedDomainId).catch(() => undefined);
+    qc.invalidateQueries({ queryKey: ["domains"] });
   };
 
   const setupDns = async (record: DnsAuthRecord) => {
@@ -156,17 +221,26 @@ export default function DomainsPage() {
     setSetupRecord(record);
     setSetupMessage(null);
     try {
-      const res = await authFetch(`/api/domains/${dnsView.domain.id}/dns/setup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record }),
-      });
-      const json = (await res.json()) as {
-        domain?: Domain;
-        dns?: DomainDnsView;
-        error?: string;
+      const post = async (replaceMx: boolean) => {
+        const res = await authFetch(`/api/domains/${dnsView.domain.id}/dns/setup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ record, replaceMx }),
+        });
+        return {
+          res,
+          json: (await res.json()) as {
+            domain?: Domain;
+            dns?: DomainDnsView;
+            error?: string;
+            code?: string;
+            records?: { content: string; priority: number }[];
+          },
+        };
       };
-      if (!res.ok) throw new Error(json.error ?? "Failed to set up DNS record");
+      let { res, json } = await post(false);
+      if (confirmMxReplacement(res, json)) ({ res, json } = await post(true));
+      if (!res.ok) throw new Error(json.error ?? t("domains.dnsSetupFailed"));
       if (json.domain && json.dns) {
         const updatedView = { domain: json.domain, dns: json.dns };
         setDnsViews((current) => ({
@@ -176,7 +250,7 @@ export default function DomainsPage() {
       } else await loadDns(dnsView.domain.id);
       qc.invalidateQueries({ queryKey: ["domains"] });
     } catch (error) {
-      setSetupMessage(error instanceof Error ? error.message : "Failed to set up DNS record");
+      setSetupMessage(error instanceof Error ? error.message : t("domains.dnsSetupFailed"));
     } finally {
       setSetupRecord(null);
     }
@@ -192,44 +266,41 @@ export default function DomainsPage() {
     setDomainChecking(false);
     if (!result.ok || !result.domain) {
       setDomainCheck(null);
-      setEnableSending(false);
-      setDomainCheckError(result.error ?? "Domain check failed");
+      setDomainCheckError(result.error ?? t("onboarding.domainCheckFailed"));
       return;
     }
 
     setDomainCheck(result.domain);
-    setEnableSending(true);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-medium">Domains</h1>
+          <h1 className="text-2xl md:text-3xl font-medium">{t("domains.title")}</h1>
           <p className="mt-1 text-sm text-neutral-500">
             {managesDns
-              ? "Domains must be on your Cloudflare account. Email Routing is enabled automatically, and Email Sending can be enabled when available."
-              : "Add the domains this server receives mail for. Open DNS on a domain to see the MX, SPF and DMARC records to create."}
+              ? t("domains.descriptionManaged")
+              : t("domains.descriptionManual")}
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className={mobilePrimaryActionClass}>
               <Plus className="h-4 w-4" />
-              New domain
+              {t("domains.new")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add domain</DialogTitle>
+              <DialogTitle>{t("domains.addTitle")}</DialogTitle>
               <DialogDescription>
-                Connect a Cloudflare zone and choose whether Mailflare should
-                provision Email Sending.
+                {t("domains.addDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="hostname">Hostname</Label>
+                <Label htmlFor="hostname">{t("domains.hostname")}</Label>
                 <Input
                   id="hostname"
                   value={hostname}
@@ -237,7 +308,6 @@ export default function DomainsPage() {
                     setHostname(e.target.value);
                     if (domainCheck?.hostname !== e.target.value.toLowerCase().trim()) {
                       setDomainCheck(null);
-                      setEnableSending(false);
                     }
                   }}
                   onBlur={() => void inspectDomain()}
@@ -246,32 +316,57 @@ export default function DomainsPage() {
               </div>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
                 <div>
-                  <Label htmlFor="enable-sending">Enable sending</Label>
+                  <Label htmlFor="receiving-provider">{t("domains.receiveWith")}</Label>
                   <p className="mt-1 text-xs leading-5 text-neutral-500">
-                    {domainChecking
-                      ? "Checking Cloudflare access..."
-                      : domainCheck
-                        ? enableSending
-                          ? "Required to send email."
-                          : "Receive-only mode."
-                        : "Enter the domain and leave the field to verify it."}
+                    {receivingProvider === "cloudflare"
+                      ? t("domains.receiveHintCloudflare")
+                      : receivingProvider === "none"
+                        ? t("domains.receiveHintNone")
+                        : t("domains.providerHintLater")}
                   </p>
                 </div>
-                {domainChecking ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin text-neutral-500" />
-                ) : (
-                  <Switch
-                    id="enable-sending"
-                    checked={enableSending}
-                    onCheckedChange={setEnableSending}
-                    disabled={!domainCheck}
-                  />
-                )}
+                <select
+                  id="receiving-provider"
+                  value={receivingProvider}
+                  onChange={(e) => setReceivingProvider(e.target.value as ReceivingProvider)}
+                  className="h-9 shrink-0 rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                >
+                  <option value="cloudflare">{t("domains.cloudflareRouting")}</option>
+                  <option value="resend">Resend</option>
+                  <option value="ses">Amazon SES</option>
+                  <option value="none">{t("domains.notSelected")}</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 px-4 py-3">
+                <div>
+                  <Label htmlFor="sending-provider">{t("domains.sendWith")}</Label>
+                  <p className="mt-1 text-xs leading-5 text-neutral-500">
+                    {domainChecking
+                      ? t("setup.checkingCloudflare")
+                      : sendingProvider === "cloudflare"
+                        ? t("domains.sendHintCloudflare")
+                        : sendingProvider === "none"
+                          ? t("domains.sendHintNone")
+                          : t("domains.providerHintLater")}
+                  </p>
+                </div>
+                {domainChecking && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin text-neutral-500" />}
+                <select
+                  id="sending-provider"
+                  value={sendingProvider}
+                  onChange={(e) => setSendingProvider(e.target.value as SendingProvider)}
+                  className="h-9 shrink-0 rounded-md border border-neutral-200 bg-white px-3 text-sm"
+                >
+                  <option value="cloudflare">{t("domains.cloudflareSending")}</option>
+                  <option value="resend">Resend</option>
+                  <option value="ses">Amazon SES</option>
+                  <option value="none">{t("domains.notSelected")}</option>
+                </select>
               </div>
               {domainCheck && (
                 <div className="flex items-center gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
                   <CheckCircle2 className="h-4 w-4" />
-                  Domain found in Cloudflare as {domainCheck.zone.name}
+                  {t("setup.domainFound", { zone: domainCheck.zone.name })}
                 </div>
               )}
               {domainCheckError && (
@@ -284,16 +379,14 @@ export default function DomainsPage() {
                   <p>{(create.error as Error).message}</p>
                   <div className="space-y-2">
                     <p className="font-medium">
-                      Check that your Cloudflare API token has these permissions:
+                      {t("domains.tokenPermissions")}
                     </p>
                     <ul className="list-disc space-y-1 pl-5">
                       <li>
-                        All accounts — DNS Settings:Edit, Email Routing
-                        Addresses:Edit; Email Sending:Edit for outbound mail
+                        {t("domains.tokenAccounts")}
                       </li>
                       <li>
-                        All zones — DNS Settings:Edit, Email Routing Rules:Edit,
-                        Zone Settings:Edit, DNS:Edit
+                        {t("domains.tokenZones")}
                       </li>
                     </ul>
                   </div>
@@ -303,7 +396,7 @@ export default function DomainsPage() {
                 onClick={() => create.mutate()}
                 disabled={!hostname || domainChecking || create.isPending}
               >
-                {create.isPending ? "Adding..." : "Add domain"}
+                {create.isPending ? t("onboarding.adding") : t("domains.addTitle")}
               </Button>
             </div>
           </DialogContent>
@@ -318,7 +411,7 @@ export default function DomainsPage() {
         )}
         {!isLoading && (data?.domains ?? []).length === 0 && (
           <p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
-            No domains yet
+            {t("domains.none")}
           </p>
         )}
         <List>
@@ -329,6 +422,13 @@ export default function DomainsPage() {
                 key={d.id}
                 dns={dns}
                 dnsDetails={dnsViews[d.id]?.dns}
+                onSendingProviderChange={changeSendingProvider}
+                sendingProviderBusy={sendingBusy}
+                sendingProviderMessage={expandedDomainId === d.id ? sendingMessage : null}
+                onReceivingProviderChange={changeReceivingProvider}
+                receivingProviderBusy={receivingBusy}
+                receivingProviderMessage={expandedDomainId === d.id ? receivingMessage : null}
+                onDnsChanged={refreshExpandedDns}
                 dnsLoading={expandedDomainId === d.id && dnsLoading}
                 dnsError={expandedDomainId === d.id ? dnsError : null}
                 expanded={expandedDomainId === d.id}

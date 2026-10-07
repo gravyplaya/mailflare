@@ -7,6 +7,7 @@ import {
 	parseListMailboxName,
 	parseSearchUids,
 	quoteImapString,
+	selectImapUidBatch,
 } from "./imap-utils";
 
 type CloudflareSocketConnect = (
@@ -139,7 +140,15 @@ function findCrlf(buffer: Uint8Array): number {
 	return -1;
 }
 
-export async function fetchImapMessages(input: ImapImportInput): Promise<ImportMessageInput[]> {
+export type ImapFetchResult = {
+	messages: ImportMessageInput[];
+	/** Messages in the folder when the batch was fetched. */
+	total: number;
+	/** Offset for the next batch, or null when no older messages remain. */
+	nextOffset: number | null;
+};
+
+export async function fetchImapMessages(input: ImapImportInput): Promise<ImapFetchResult> {
 	assertSafeImapHost(input.host);
 	const connect = await getCloudflareSocketConnect();
 	const socket = connect(
@@ -152,7 +161,8 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImportM
 		await imap.command(`LOGIN ${quoteImapString(input.username)} ${quoteImapString(input.password)}`);
 		await imap.command(`SELECT ${quoteImapString(input.folder)}`);
 		const searchLines = await imap.command("UID SEARCH ALL");
-		const uids = searchLines.flatMap(parseSearchUids).slice(-input.limit);
+		const batch = selectImapUidBatch(searchLines.flatMap(parseSearchUids), input.limit, input.offset);
+		const uids = batch.uids;
 		const messages: ImportMessageInput[] = [];
 		for (const uid of uids) {
 			messages.push({
@@ -161,13 +171,13 @@ export async function fetchImapMessages(input: ImapImportInput): Promise<ImportM
 			});
 		}
 		await imap.command("LOGOUT").catch(() => undefined);
-		return messages;
+		return { messages, total: batch.total, nextOffset: batch.nextOffset };
 	} finally {
 		await imap.close();
 	}
 }
 
-export async function listImapFolders(input: Omit<ImapImportInput, "folder" | "limit">): Promise<string[]> {
+export async function listImapFolders(input: Omit<ImapImportInput, "folder" | "limit" | "offset">): Promise<string[]> {
 	assertSafeImapHost(input.host);
 	const connect = await getCloudflareSocketConnect();
 	const socket = connect(

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AlarmClock, Mail, X } from "lucide-react";
 import { getEmailDisplayName } from "@/lib/email/address";
+import { useLanguage } from "@/components/language-provider";
 import type { NewMessagePopupProps } from "./new-message-popup-types";
 
 export function NewMessagePopup({
@@ -10,6 +11,7 @@ export function NewMessagePopup({
 	onDismiss,
 }: NewMessagePopupProps) {
 	const isFollowUp = notification.type === "follow_up_due";
+	const { t } = useLanguage();
 	return (
 		<div className="fixed right-5 top-5 z-[100] w-[min(380px,calc(100vw-40px))] rounded-xl bg-white p-4 shadow-xl">
 			<div className="flex items-start gap-3">
@@ -22,15 +24,15 @@ export function NewMessagePopup({
 					className="min-w-0 flex-1"
 				>
 					<p className="text-sm font-semibold text-neutral-900">
-						{isFollowUp ? "Follow-up due" : "New email"}
+						{isFollowUp ? t("notification.followUpDue") : t("notification.newEmail")}
 					</p>
 					<p className="mt-0.5 truncate text-sm text-neutral-800">
-						{notification.subject || "(no subject)"}
+						{notification.subject || t("list.noSubject")}
 					</p>
 					<p className="mt-1 truncate text-xs text-neutral-500">
 						{isFollowUp
-							? "No reply yet — check your Follow-ups"
-							: `From ${notification.type === "new_message" ? (notification.fromName ?? getEmailDisplayName(notification.from)) : ""}`}
+							? t("notification.followUpNoReply")
+							: t("notification.from", { sender: notification.fromName ?? getEmailDisplayName(notification.from) })}
 					</p>
 				</Link>
 				<button
@@ -39,7 +41,7 @@ export function NewMessagePopup({
 					className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
 				>
 					<X className="h-4 w-4" />
-					<span className="sr-only">Dismiss notification</span>
+					<span className="sr-only">{t("notification.dismiss")}</span>
 				</button>
 			</div>
 		</div>

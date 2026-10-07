@@ -1,9 +1,7 @@
 import {
-	createSendingSubdomain,
 	enableEmailRouting,
 	findZoneByHostname,
 	getEmailRoutingSettings,
-	listSendingSubdomains,
 } from "@/lib/cloudflare-api";
 import {
 	ensureEmailRoutingCatchAllToWorker,
@@ -14,6 +12,7 @@ import { hasCloudflareCredentials, isNodeRuntime } from "@/lib/runtime";
 import type { DomainProvisioningChanges, DomainProvisioningResult } from "@/lib/domains/types";
 import { removeMxRecords } from "@/lib/domains/mx-records";
 import { rollbackDomainProvisioning } from "@/lib/domains/rollback";
+import { ensureSendingSubdomain } from "@/lib/domains/sending-subdomain";
 
 /** Node/Docker has no Email Worker; a catch-all PUT to one 404s (CF 2016). */
 export function shouldBindEmailCatchAllToWorker(
@@ -106,17 +105,15 @@ export async function provisionDomainOnCloudflare(
 		}
 
 		if (enableSending) {
-			const subs = await listSendingSubdomains(env, zone.id);
-			const existingSub = subs.find((s) => s.name === normalized);
-			if (existingSub) {
-				sendingSubdomainTag = existingSub.tag;
-				sendingEnabled = existingSub.enabled;
-			} else {
-				const created = await createSendingSubdomain(env, zone.id, normalized);
-				sendingSubdomainTag = created.tag;
-				sendingEnabled = created.enabled;
-				changes.createdSendingSubdomainTag = created.tag;
-			}
+			// Cloudflare refuses (401, code 2036) while another service's MX records
+			// are on the hostname; replacing them follows the same consent as routing.
+			const { subdomain, created } = await ensureSendingSubdomain(env, zone.id, normalized, {
+				replaceMx: options?.replaceMxRecords,
+				deletedMx: changes.deletedMxRecords,
+			});
+			sendingSubdomainTag = subdomain.tag;
+			sendingEnabled = subdomain.enabled;
+			if (created) changes.createdSendingSubdomainTag = subdomain.tag;
 		}
 	} catch (error) {
 		await rollbackDomainProvisioning(env, changes);

@@ -16,4 +16,12 @@ export type CloudflareDnsRecordCreate =
 			ttl: number;
 			comment?: string;
 			tags?: string[];
+	  }	| {
+			type: "CNAME";
+			name: string;
+			content: string;
+			ttl: number;
+			proxied?: boolean;
+			comment?: string;
+			tags?: string[];
 	  };

@@ -5,6 +5,7 @@ import { formatRecipientAddressList } from "@/lib/email/recipient-display";
 import { getDisplayNameForAddress } from "@/lib/contacts/utils";
 import { htmlToReadableText, splitRepliedEmailContent } from "@/lib/email/reply-content-utils";
 import { splitQuotedHtml } from "@/components/compose/rich-text-utils";
+import { resolveEmailCidUrls } from "@/lib/email/html";
 import type { Message } from "@/hooks/types";
 import type { MessageAttachment, MessageBodyDisplay, MessageDetailResponse } from "./types";
 
@@ -92,14 +93,11 @@ export function resolveInlineAttachmentUrls(
 ): string | null {
 	if (!htmlBody) return null;
 
-	return attachments.reduce((html, attachment) => {
-		if (!attachment.contentId) return html;
-		const contentId = attachment.contentId.replace(/^<|>$/g, "");
-		return html.replaceAll(
-			`cid:${contentId}`,
-			getAttachmentUrl(messageId, attachment.id),
-		);
-	}, htmlBody);
+	const urls = new Map<string, string>();
+	for (const attachment of attachments) {
+		if (attachment.contentId) urls.set(attachment.contentId.replace(/^<|>$/g, ""), getAttachmentUrl(messageId, attachment.id));
+	}
+	return resolveEmailCidUrls(htmlBody, urls);
 }
 
 export function formatAttachmentSize(size: number): string {

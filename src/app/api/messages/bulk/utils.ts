@@ -1,4 +1,4 @@
-import type { BulkMessageAction } from "./types";
+import type { BulkMessageAction, PermanentDeleteFolder } from "./types";
 
 const allowedBulkActions = new Set<BulkMessageAction>([
 	"archive",
@@ -9,6 +9,7 @@ const allowedBulkActions = new Set<BulkMessageAction>([
 	"inbox",
 	"done",
 	"folder",
+	"delete",
 ]);
 
 export function isAllowedBulkMessageAction(action: unknown): action is BulkMessageAction {
@@ -29,4 +30,16 @@ export function getReadValueForBulkAction(action: BulkMessageAction): boolean | 
 	if (action === "read") return true;
 	if (action === "unread") return false;
 	return null;
+}
+
+/**
+ * Permanent deletion is only offered for mail the user already threw away, so a
+ * stray "delete" can never destroy something still in the inbox, a folder or Sent.
+ */
+export function isPermanentlyDeletableStatus(status: string | null | undefined): status is PermanentDeleteFolder {
+	return status === "trash" || status === "spam";
+}
+
+export function isPermanentDeleteFolder(folder: unknown): folder is PermanentDeleteFolder {
+	return folder === "trash" || folder === "spam";
 }

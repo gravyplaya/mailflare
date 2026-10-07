@@ -7,7 +7,7 @@ import type { AuthGuardProps } from "./auth-guard-types";
 import { LoadingTransition } from "@/components/loading-transition";
 import { saveUserTimeZonePreference } from "@/lib/time/client";
 
-export function AuthGuard({ children, mode = "protected", requireMailbox, requireRole, requirePrimary }: AuthGuardProps) {
+export function AuthGuard({ children, mode = "protected", requireMailbox, requireRole, requirePrimary, allowAuthenticated }: AuthGuardProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const [authorized, setAuthorized] = useState(mode === "public");
@@ -38,7 +38,7 @@ export function AuthGuard({ children, mode = "protected", requireMailbox, requir
 				const data = (await response.json()) as { hasMailboxes?: boolean; isSetup?: boolean; user?: { id?: string; role?: string; isPrimaryAdmin?: boolean; timeZone?: string | null } };
 				if (data.user?.id) saveUserTimeZonePreference(data.user.id, data.user.timeZone ?? null);
 				if (mode === "public") {
-					router.replace("/inbox");
+					if (!allowAuthenticated) router.replace("/inbox");
 					return;
 				}
 
@@ -73,7 +73,7 @@ export function AuthGuard({ children, mode = "protected", requireMailbox, requir
 		return () => {
 			cancelled = true;
 		};
-	}, [mode, pathname, requireMailbox, requireRole, requirePrimary, router]);
+	}, [mode, pathname, requireMailbox, requireRole, requirePrimary, allowAuthenticated, router]);
 
 	useEffect(() => {
 		const refreshTimeZone = (event: StorageEvent) => {

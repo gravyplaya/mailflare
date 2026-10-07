@@ -12,6 +12,7 @@ import { createAuditLog } from "@/lib/mailboxes/audit";
 import { loadMessageAttachmentContents, storeMessageAttachments, validateAttachments } from "@/lib/email/attachments";
 import type { AttachmentContent } from "@/lib/email/attachment-types";
 import { getOutboundAttachmentMaxMb } from "@/lib/email/attachment-policy";
+import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import { prepareCloudflareAttachments } from "@/lib/email/cloud-attachment-utils";
 
 export type SendEmailInput = {
@@ -183,42 +184,43 @@ async function deliverEmail(env: CloudflareEnv, delivery: PreparedDelivery): Pro
 	const db = getDb(env);
 	const toAddr = joinEmailAddressList(to);
 	try {
-		const prepared = await prepareCloudflareAttachments(env, attachments, {
-			subject: input.subject,
-			html: input.html,
-			text: input.text,
-			headers,
-			publicOrigin: input.publicOrigin,
-		});
+		const provider = await getOutboundProviderConfig(env, from);
+		// Cloudflare's 5 MiB cap forces big files into download links; Resend takes
+		// the attachments directly (the admin's outgoing limit still applies).
+		const prepared = provider.provider === "cloudflare"
+			? await prepareCloudflareAttachments(env, attachments, {
+				subject: input.subject,
+				html: input.html,
+				text: input.text,
+				headers,
+				publicOrigin: input.publicOrigin,
+			})
+			: { attachments, html: input.html, text: input.text };
 		if (prepared.text !== input.text || prepared.html !== input.html) {
 			await db.update(messages).set({ textBody: prepared.text ?? null, htmlBody: prepared.html ?? null }).where(eq(messages.id, messageId));
 		}
-		const response = await env.EMAIL.send({
-			from,
-			to,
-			...(cc.length ? { cc } : {}),
-			...(bcc.length ? { bcc } : {}),
-			subject: input.subject,
-			headers: Object.keys(headers).length ? headers : undefined,
-			html: prepared.html,
-			text: prepared.text,
-			attachments: prepared.attachments.map((attachment) =>
-				attachment.disposition === "inline" && attachment.contentId
-					? {
-							filename: attachment.filename,
-							type: attachment.type,
-							content: attachment.content,
-							disposition: "inline" as const,
-							contentId: attachment.contentId,
-						}
-					: {
-							filename: attachment.filename,
-							type: attachment.type,
-							content: attachment.content,
-							disposition: "attachment" as const,
-						},
-			),
-		});
+		const response = await sendThroughProvider(
+			env,
+			provider,
+			{
+				from,
+				to,
+				cc,
+				bcc,
+				subject: input.subject,
+				headers,
+				html: prepared.html,
+				text: prepared.text,
+				attachments: prepared.attachments.map((attachment) => ({
+					filename: attachment.filename,
+					type: attachment.type,
+					content: attachment.content,
+					disposition: attachment.disposition === "inline" && attachment.contentId ? "inline" : "attachment",
+					contentId: attachment.contentId,
+				})),
+			},
+			jobId,
+		);
 
 		// A fresh message starts its own conversation; Cloudflare's Message-ID is what
 		// any reply will name in In-Reply-To, so key the thread by it.

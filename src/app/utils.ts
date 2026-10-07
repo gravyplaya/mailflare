@@ -8,41 +8,41 @@ export const landingNavItems: LandingNavItem[] = [
 ];
 
 export const sidebarItems: SidebarItem[] = [
-	{ label: "Inbox", icon: Inbox, active: true, count: "18" },
-	{ label: "Sent", icon: Send },
-	{ label: "Drafts", icon: FileText, count: "4" },
-	{ label: "Spam", icon: ShieldAlert },
-	{ label: "Trash", icon: Trash2 },
+	{ labelKey: "navigation.inbox", icon: Inbox, active: true, count: "18" },
+	{ labelKey: "navigation.sent", icon: Send },
+	{ labelKey: "navigation.drafts", icon: FileText, count: "4" },
+	{ labelKey: "navigation.spam", icon: ShieldAlert },
+	{ labelKey: "navigation.trash", icon: Trash2 },
 ];
 
 export const heroMessages: MailPreview[] = [
 	{
 		icon: MailCheck,
 		sender: "postmaster@northline.dev",
-		subject: "Route matched",
-		preview: "Inbound mail was delivered to support after DNS validation.",
-		badge: "Inbound",
+		subjectKey: "home.msg1.subject",
+		previewKey: "home.msg1.preview",
+		badgeKey: "home.msg1.badge",
 	},
 	{
 		icon: MailCheck,
 		sender: "ops@halcyon.tools",
-		subject: "API send accepted",
-		preview: "Message queued through the production API key.",
-		badge: "Sent",
+		subjectKey: "home.msg2.subject",
+		previewKey: "home.msg2.preview",
+		badgeKey: "home.msg2.badge",
 	},
 	{
 		icon: MailCheck,
 		sender: "alerts@marketmesh.io",
-		subject: "Webhook delivered",
-		preview: "Event payload reached your billing workspace endpoint.",
-		badge: "Hook",
+		subjectKey: "home.msg3.subject",
+		previewKey: "home.msg3.preview",
+		badgeKey: "home.msg3.badge",
 	},
 	{
 		icon: MailCheck,
 		sender: "admin@mailflare.dev",
-		subject: "Mailbox provisioned",
-		preview: "New routing mailbox is ready for customer replies.",
-		badge: "Admin",
+		subjectKey: "home.msg4.subject",
+		previewKey: "home.msg4.preview",
+		badgeKey: "home.msg4.badge",
 	},
 ];
 
@@ -60,11 +60,11 @@ export const deliverySignals = [
 
 export function getHomeActions(isLoggedIn: boolean): HomeAction[] {
 	if (isLoggedIn) {
-		return [{ href: "/inbox", label: "Dashboard", variant: "default" }];
+		return [{ href: "/inbox", labelKey: "home.dashboard", variant: "default" }];
 	}
 
 	return [
-		{ href: "/login", label: "Log in", variant: "outline" },
-		{ href: "/setup", label: "Create account", variant: "default" },
+		{ href: "/login", labelKey: "home.logIn", variant: "outline" },
+		{ href: "/setup", labelKey: "home.createAccount", variant: "default" },
 	];
 }

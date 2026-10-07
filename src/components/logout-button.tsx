@@ -1,22 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { logoutClientSession } from "@/lib/auth/logout";
 
 export function LogoutButton() {
+	const { t } = useLanguage();
 	const router = useRouter();
 	return (
 		<Button
 			variant="outline"
 			className="w-full"
 			onClick={async () => {
-				await logoutClientSession();
-				router.replace("/login");
+				const switched = await logoutClientSession();
+				router.replace(switched ? "/inbox" : "/login");
 				router.refresh();
 			}}
 		>
-			Log out
+			{t("auth.logout")}
 		</Button>
 	);
 }
