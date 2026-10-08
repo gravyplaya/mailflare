@@ -1,7 +1,12 @@
+"use client";
+
+import { useLanguage } from "@/components/language-provider";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ConversationSkeleton() {
-	return <div role="status" aria-label="Loading conversation" className="space-y-6 py-2">
+	const { t } = useLanguage();
+	return <div role="status" aria-label={t("agent.loadingConversation")} className="space-y-6 py-2">
 		<div className="flex justify-end"><Skeleton className="h-12 w-3/5 max-w-72 rounded-2xl bg-blue-100/65" /></div>
 		<div className="space-y-3">
 			<Skeleton className="h-3 w-24" />

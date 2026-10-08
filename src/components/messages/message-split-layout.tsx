@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { useSidebar } from "@/components/sidebar-state";
 import { useAssistantOpen } from "@/components/agent/assistant-open-state";
 import { readColumnWidth, readInitialColumnWidth, saveColumnWidth } from "@/components/column-width-preferences";
@@ -28,6 +29,7 @@ export function MessageSplitLayout({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const startWidth = useRef(listWidth);
 	const resizedWidth = useRef(listWidth);
+	const { t } = useLanguage();
 	const { userId, setForcedMinimal } = useSidebar();
 	const assistantOpen = useAssistantOpen();
 	const listVisible = twoColumnReading && !assistantOpen && manualListVisible;
@@ -81,7 +83,7 @@ export function MessageSplitLayout({
 				/>
 				</div>
 				<ResizeHandle
-					label="Resize message list"
+					label={t("list.resize")}
 					onResizeStart={() => { startWidth.current = listWidth; resizedWidth.current = listWidth; }}
 					onResize={(delta) => {
 						const requestedWidth = startWidth.current + delta;
@@ -93,11 +95,12 @@ export function MessageSplitLayout({
 				/>
 			</aside>
 			)}
-			<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.title }}>
+			<MessageListVisibilityContext.Provider value={{ visible: listVisible, toggle: () => { const visible = !manualListVisible; setManualListVisible(visible); saveMessageListVisible(visible); }, singleColumn: !twoColumnReading, backHref: config.hrefPrefix, backLabel: config.titleKey ? t(config.titleKey) : config.title }}>
 			<MessageDetailNavigationProvider config={config}>
 			<section className="h-full min-h-0 min-w-0 overflow-hidden bg-white flex flex-col">
 				{twoColumnReading && selectedMessages.length > 0 ? (
 					<BulkMessageSelectionPane
+						folder={config.folder}
 						selectedMessages={selectedMessages}
 						onClearSelection={() => setSelectedMessages([])}
 					/>

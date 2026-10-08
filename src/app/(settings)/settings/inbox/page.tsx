@@ -1,3 +1,4 @@
+import { getServerTranslator } from "@/lib/i18n/server";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { InboxThreadingSettings } from "@/components/settings/inbox-threading-settings";
 import { RecipientAddressSettings } from "@/components/settings/recipient-address-settings";
@@ -6,86 +7,99 @@ import { InboxShortcutsSettings } from "@/components/settings/inbox-shortcuts-se
 import { MailboxAutoReplyForm } from "@/components/settings/mailbox-auto-reply-form";
 import { SpamFilterSettings } from "@/components/settings/spam-filter-settings";
 import { GatekeeperSettings } from "@/components/settings/gatekeeper-settings";
+import { TrashRetentionSettings } from "@/components/settings/trash-retention-settings";
+import { PushNotificationSettings } from "@/components/settings/push-notification-settings";
 import { BrowserNotificationSettings } from "@/components/settings/browser-notification-settings";
 
-export default function SettingsInboxPage() {
+export default async function SettingsInboxPage() {
+	const t = await getServerTranslator();
 	return (
 		<div className="space-y-8 py-4">
 			<section className="space-y-4">
 				<div>
-					<h2 className="text-xl font-semibold text-neutral-900">Inbox experience</h2>
-					<p className="mt-1 text-sm text-neutral-500">Choose how you read and interact with email.</p>
+					<h2 className="text-xl font-semibold text-neutral-900">{t("settingsPage.inbox.experience")}</h2>
+					<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.experienceDescription")}</p>
 				</div>
 				<div className="divide-y divide-neutral-100 rounded-3xl bg-white p-6">
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Appearance</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose a light or dark interface.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.appearance")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.appearanceDescription")}</p>
 						</div>
 						<AppearanceSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Reading layout</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose how open emails appear.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.readingLayout")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.readingLayoutDescription")}</p>
 						</div>
 						<InboxReadingLayoutSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Threading</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose how emails are organized in your inbox.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.threading")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.threadingDescription")}</p>
 						</div>
 						<InboxThreadingSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Addresses</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose how recipient addresses appear when you read mail.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.addresses")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.addressesDescription")}</p>
 						</div>
 						<RecipientAddressSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Shortcuts</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose whether keyboard shortcuts are active.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.shortcuts")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.shortcutsDescription")}</p>
 						</div>
 						<InboxShortcutsSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Notifications</h3>
-							<p className="mt-1 text-sm text-neutral-500">Choose how you hear about new email.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.notifications")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.notificationsDescription")}</p>
 						</div>
 						<BrowserNotificationSettings />
+						<div className="mt-4">
+							<PushNotificationSettings />
+						</div>
 					</div>
 				</div>
 			</section>
 			<section className="space-y-4">
 				<div>
-					<h2 className="text-xl font-semibold text-neutral-900">Message handling</h2>
-					<p className="mt-1 text-sm text-neutral-500">Manage spam protection and automatic replies.</p>
+					<h2 className="text-xl font-semibold text-neutral-900">{t("settingsPage.inbox.handling")}</h2>
+					<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.handlingDescription")}</p>
 				</div>
 				<div className="divide-y divide-neutral-100 rounded-3xl bg-white p-6">
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Spam protection</h3>
-							<p className="mt-1 text-sm text-neutral-500">Control local spam analysis for incoming messages.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.spamProtection")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.spamProtectionDescription")}</p>
 						</div>
 						<SpamFilterSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Gatekeeper</h3>
-							<p className="mt-1 text-sm text-neutral-500">Review mail from new senders before it reaches your inbox.</p>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.gatekeeper")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.gatekeeperDescription")}</p>
 						</div>
 						<GatekeeperSettings />
 					</div>
 					<div className="py-6 first:pt-0 last:pb-0">
 						<div className="mb-4">
-							<h3 className="text-base font-semibold text-neutral-900">Automatic response</h3>
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.cleanup")}</h3>
+							<p className="mt-1 text-sm text-neutral-500">{t("settingsPage.inbox.cleanupDescription")}</p>
+						</div>
+						<TrashRetentionSettings />
+					</div>
+					<div className="py-6 first:pt-0 last:pb-0">
+						<div className="mb-4">
+							<h3 className="text-base font-semibold text-neutral-900">{t("settingsPage.inbox.autoReply")}</h3>
 							<p className="mt-1 text-sm text-neutral-500">
-								Configure the subject and message for the inbox currently selected above.
+								{t("settingsPage.inbox.autoReplyDescription")}
 							</p>
 						</div>
 						<MailboxAutoReplyForm />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ export function ProfileForm({
   initialResetEmail,
   email,
 }: ProfileFormProps) {
+  const { t } = useLanguage();
   const [name, setName] = useState(initialName);
   const [resetEmail, setResetEmail] = useState(initialResetEmail);
   const [savedName, setSavedName] = useState(initialName);
@@ -36,7 +38,7 @@ export function ProfileForm({
         throw new Error(
           typeof data.error === "string"
             ? data.error
-            : "Failed to update account",
+            : t("settings.profile.updateFailed"),
         );
       }
 
@@ -50,7 +52,7 @@ export function ProfileForm({
     } catch (error) {
       throw error instanceof Error
         ? error
-        : new Error("Failed to update account");
+        : new Error(t("settings.profile.updateFailed"));
     }
   }
 
@@ -60,10 +62,10 @@ export function ProfileForm({
     setProfileStatus(null);
     try {
       await saveProfile(name, savedResetEmail);
-      setProfileStatus("Saved");
+      setProfileStatus(t("common.saved"));
     } catch (error) {
       setProfileStatus(
-        error instanceof Error ? error.message : "Failed to update account",
+        error instanceof Error ? error.message : t("settings.profile.updateFailed"),
       );
     } finally {
       setSavingProfile(false);
@@ -76,12 +78,12 @@ export function ProfileForm({
     setRecoveryStatus(null);
     try {
       await saveProfile(savedName, resetEmail);
-      setRecoveryStatus("Saved");
+      setRecoveryStatus(t("common.saved"));
     } catch (error) {
       setRecoveryStatus(
         error instanceof Error
           ? error.message
-          : "Failed to update recovery email",
+          : t("settings.profile.recoveryFailed"),
       );
     } finally {
       setSavingRecovery(false);
@@ -98,16 +100,16 @@ export function ProfileForm({
           <ProfileAvatarForm name={name} colorSeed={email} />
           <div>
             <p className="text-sm font-medium text-neutral-900">
-              Profile picture
+              {t("settings.profile.pictureTitle")}
             </p>
             <p className="mt-1 text-sm text-neutral-500">
-              Choose a picture to show across your account.
+              {t("settings.profile.pictureDescription")}
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="name">Name</Label>
+          <Label htmlFor="name">{t("common.name")}</Label>
           <Input
             id="name"
             value={name}
@@ -116,7 +118,7 @@ export function ProfileForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="accountEmail">Current email</Label>
+          <Label htmlFor="accountEmail">{t("settings.profile.currentEmail")}</Label>
           <Input
             id="accountEmail"
             value={email}
@@ -132,7 +134,7 @@ export function ProfileForm({
             type="submit"
             disabled={savingProfile || name.trim() === savedName}
           >
-            {savingProfile ? "Saving..." : "Save profile"}
+            {savingProfile ? t("common.saving") : t("settings.profile.save")}
           </Button>
           {profileStatus && (
             <p className="text-sm text-neutral-500">{profileStatus}</p>
@@ -146,14 +148,14 @@ export function ProfileForm({
       >
         <div>
           <h3 className="text-lg font-semibold text-neutral-900">
-            Recovery email
+            {t("settings.profile.recoveryTitle")}
           </h3>
           <p className="mt-1 text-sm text-neutral-500">
-            Used to recover access if you cannot sign in.
+            {t("settings.profile.recoveryDescription")}
           </p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="resetEmail">Email address</Label>
+          <Label htmlFor="resetEmail">{t("settings.profile.emailAddress")}</Label>
           <Input
             id="resetEmail"
             value={resetEmail}
@@ -167,7 +169,7 @@ export function ProfileForm({
             type="submit"
             disabled={savingRecovery || resetEmail.trim() === savedResetEmail}
           >
-            {savingRecovery ? "Saving..." : "Save recovery email"}
+            {savingRecovery ? t("common.saving") : t("settings.profile.saveRecovery")}
           </Button>
           {recoveryStatus && (
             <p className="text-sm text-neutral-500">{recoveryStatus}</p>

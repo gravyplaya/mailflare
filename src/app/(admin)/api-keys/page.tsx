@@ -1,8 +1,10 @@
 "use client";
 
+import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +27,7 @@ import type { ApiKey } from "./types";
 import { ADMIN_KEY_PERMISSIONS, parseApiKeyScopes } from "./utils";
 
 export default function ApiKeysPage() {
+	const { t } = useLanguage();
 	const qc = useQueryClient();
 	const [name, setName] = useState("");
 	const [scopes, setScopes] = useState<AdminApiKeyScope[]>(["domains"]);
@@ -38,7 +41,7 @@ export default function ApiKeysPage() {
 		queryKey: ["admin-api-keys"],
 		queryFn: async () => {
 			const res = await authFetch("/api/admin/api-keys");
-			if (!res.ok) throw new Error("Could not load admin API keys");
+			if (!res.ok) throw new Error(t("adminKeys.loadFailed"));
 			return (await res.json()) as { apiKeys: ApiKey[] };
 		},
 	});
@@ -51,7 +54,7 @@ export default function ApiKeysPage() {
 				body: JSON.stringify({ name: name.trim(), scopes, mcpAllowed }),
 			});
 			const json = (await res.json()) as { key?: string; error?: string };
-			if (!res.ok || !json.key) throw new Error(typeof json.error === "string" ? json.error : "Could not create API key");
+			if (!res.ok || !json.key) throw new Error(typeof json.error === "string" ? json.error : t("apiKeys.createFailed"));
 			setNewKey(json.key ?? null);
 			setCreatedMcpAllowed(mcpAllowed);
 			setCopied(false);
@@ -65,7 +68,7 @@ export default function ApiKeysPage() {
 	const revoke = useMutation({
 		mutationFn: async (id: string) => {
 			const res = await authFetch(`/api/admin/api-keys?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-			if (!res.ok) throw new Error("Could not revoke admin API key");
+			if (!res.ok) throw new Error(t("adminKeys.revokeFailed"));
 		},
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-api-keys"] }),
 	});
@@ -73,27 +76,27 @@ export default function ApiKeysPage() {
 	return (
 		<div className="space-y-6">
 			<div className="flex items-center justify-between gap-4">
-				<h1 className="text-3xl font-medium">Admin API keys</h1>
+				<h1 className="text-2xl md:text-3xl font-medium">{t("admin.section.apiKeysTitle")}</h1>
 				<Dialog open={createOpen} onOpenChange={(open) => { if (create.isPending) return; setCreateOpen(open); if (!open) { setNewKey(null); setCopied(false); } }}>
 					<DialogTrigger asChild>
-						<Button>
+						<Button className={mobilePrimaryActionClass}>
 							<Plus className="h-4 w-4" />
-							New API key
+							{t("apiKeys.new")}
 						</Button>
 					</DialogTrigger>
 					<DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
 						<DialogHeader>
-							<DialogTitle>{newKey ? "API key created" : "Create API key"}</DialogTitle>
-							<DialogDescription>{newKey ? "Copy this key now. It will only be shown once." : "Name your key and choose the access it needs."}</DialogDescription>
+							<DialogTitle>{newKey ? t("apiKeys.createdTitle") : t("apiKeys.createTitle")}</DialogTitle>
+							<DialogDescription>{newKey ? t("apiKeys.copyNow") : t("apiKeys.nameAndAccess")}</DialogDescription>
 						</DialogHeader>
 						{!newKey && <div className="space-y-4">
 						<div className="space-y-2">
-							<Label htmlFor="admin-key-name">Key name</Label>
-							<Input id="admin-key-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="Production app" />
+							<Label htmlFor="admin-key-name">{t("apiKeys.keyName")}</Label>
+							<Input id="admin-key-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder={t("adminKeys.namePlaceholder")} />
 						</div>
-						<label className="flex items-start gap-3 text-sm"><Checkbox checked={mcpAllowed} onChange={(event) => setMcpAllowed(event.target.checked)} /><span><strong>Allow MCP access</strong><span className="mt-1 block text-neutral-500">Use this key with an MCP client to manage only the admin areas selected below. It cannot read or send mail.</span></span></label>
+						<label className="flex items-start gap-3 text-sm"><Checkbox checked={mcpAllowed} onChange={(event) => setMcpAllowed(event.target.checked)} /><span><strong>{t("apiKeys.allowMcp")}</strong><span className="mt-1 block text-neutral-500">{t("adminKeys.allowMcpHint")}</span></span></label>
 						<fieldset className="space-y-2">
-							<legend className="text-sm font-medium">Permissions</legend>
+							<legend className="text-sm font-medium">{t("apiKeys.permissions")}</legend>
 							<div className="space-y-2">
 								{ADMIN_KEY_PERMISSIONS.map((scope) => (
 									<label key={scope.value} className="flex items-start gap-3 text-sm">
@@ -108,7 +111,7 @@ export default function ApiKeysPage() {
 												)
 											}
 										/>
-										<span><strong>{scope.label}</strong><span className="block text-neutral-500">{scope.description}</span></span>
+										<span><strong>{t(scope.labelKey)}</strong><span className="block text-neutral-500">{t(scope.descriptionKey)}</span></span>
 									</label>
 								))}
 							</div>
@@ -120,10 +123,10 @@ export default function ApiKeysPage() {
 							onClick={() => create.mutate()}
 							disabled={!name.trim() || scopes.length === 0 || create.isPending}
 						>
-							{create.isPending ? "Creating..." : "Create key"}
+							{create.isPending ? t("accounts.creating") : t("adminKeys.createKey")}
 						</Button>
 						</div>}
-						{newKey && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><code className="block break-all rounded bg-white p-2 text-xs">{newKey}</code>{createdMcpAllowed && <McpAgentInstructions mode="admin" apiKey={newKey} />}<div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(newKey).then(() => setCopied(true))}><Copy className="h-4 w-4" />{copied ? "Copied" : "Copy key"}</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setCreateOpen(false); setNewKey(null); setCopied(false); }}>Done</Button></div></div>}
+						{newKey && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><code className="block break-all rounded bg-white p-2 text-xs">{newKey}</code>{createdMcpAllowed && <McpAgentInstructions mode="admin" apiKey={newKey} />}<div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(newKey).then(() => setCopied(true))}><Copy className="h-4 w-4" />{copied ? t("common.copied") : t("apiKeys.copyKey")}</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setCreateOpen(false); setNewKey(null); setCopied(false); }}>{t("common.done")}</Button></div></div>}
 					</DialogContent>
 				</Dialog>
 			</div>
@@ -134,7 +137,7 @@ export default function ApiKeysPage() {
 				)}
 				{!isLoading && (data?.apiKeys ?? []).length === 0 && (
 					<p className="rounded-2xl bg-white px-5 py-4 text-sm text-neutral-500">
-						No API keys yet
+						{t("apiKeys.none")}
 					</p>
 				)}
 				<List>
@@ -157,7 +160,7 @@ export default function ApiKeysPage() {
 									))}
 								</span>
 							</span>
-						<Button type="button" size="sm" variant="outline" disabled={revoke.isPending} onClick={() => { if (window.confirm(`Revoke “${key.name}”? Apps using this key will lose access immediately.`)) revoke.mutate(key.id); }}><Trash2 className="h-4 w-4" />Revoke</Button>
+						<Button type="button" size="sm" variant="outline" disabled={revoke.isPending} onClick={() => { if (window.confirm(t("apiKeys.revokeConfirm", { name: key.name }))) revoke.mutate(key.id); }}><Trash2 className="h-4 w-4" />{t("common.revoke")}</Button>
 						</ListRow>
 					))}
 				</List>

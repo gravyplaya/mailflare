@@ -45,7 +45,12 @@ export function formatCloudflareError(path: string, status: number, statusText: 
 	return `Cloudflare API ${status} on ${path}: ${message}`;
 }
 
-export function getCloudflareAuthHint(errors: CfApiError[]) {
+export function getCloudflareAuthHint(errors: CfApiError[], path = "") {
+	// Cloudflare answers a sending-subdomain create with 401/2036 when the hostname
+	// has another service's MX records, so a valid token is not the likely cause.
+	if (path.includes("/email/sending/") && errors.some((error) => error.code === 2036)) {
+		return " If the token has Email Sending permissions, check the domain for MX records pointing at another mail service; Cloudflare refuses sending setup until they are removed.";
+	}
 	const hasAuthError = errors.some(
 		(error) =>
 			error.code === 10000 ||

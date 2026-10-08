@@ -1,21 +1,22 @@
+import type { TranslationKey } from "@/lib/i18n/types";
 import { authFetch } from "@/lib/auth/client";
 import type { ApiKeyScope } from "@/lib/api/scopes";
 import type { ManagedApiKey, McpKeyScope } from "./api-keys-settings-types";
 
-export const MCP_KEY_SCOPES: { value: McpKeyScope; label: string; description: string }[] = [
-	{ value: "mcp:read", label: "Read mail", description: "List, search, and read messages." },
-	{ value: "mcp:draft", label: "Manage drafts", description: "Create, edit, and discard drafts." },
-	{ value: "mcp:organize", label: "Organize mail", description: "Mark messages read and move them." },
-	{ value: "mcp:request-send", label: "Request send review", description: "Propose a send that you must confirm in Mailflare." },
-	{ value: "mcp:calendar-read", label: "Read calendar", description: "List, search, and inspect events and free time." },
-	{ value: "mcp:calendar-write", label: "Manage calendar", description: "Create, update, and delete events." },
+export const MCP_KEY_SCOPES: { value: McpKeyScope; labelKey: TranslationKey; descriptionKey: TranslationKey }[] = [
+	{ value: "mcp:read", labelKey: "apiKeys.mcpRead.label", descriptionKey: "apiKeys.mcpRead.description" },
+	{ value: "mcp:draft", labelKey: "apiKeys.mcpDraft.label", descriptionKey: "apiKeys.mcpDraft.description" },
+	{ value: "mcp:organize", labelKey: "apiKeys.mcpOrganize.label", descriptionKey: "apiKeys.mcpOrganize.description" },
+	{ value: "mcp:request-send", labelKey: "apiKeys.mcpRequestSend.label", descriptionKey: "apiKeys.mcpRequestSend.description" },
+	{ value: "mcp:calendar-read", labelKey: "apiKeys.mcpCalendarRead.label", descriptionKey: "apiKeys.mcpCalendarRead.description" },
+	{ value: "mcp:calendar-write", labelKey: "apiKeys.mcpCalendarWrite.label", descriptionKey: "apiKeys.mcpCalendarWrite.description" },
 ];
 
-export const STANDARD_KEY_SCOPES: { value: ApiKeyScope; label: string; description: string }[] = [
-	{ value: "read", label: "Read mail", description: "Read messages through the API." },
-	{ value: "send", label: "Send mail", description: "Send messages directly through the API." },
-	{ value: "calendar:read", label: "Read calendar", description: "Read your calendar events through the API." },
-	{ value: "calendar:write", label: "Manage calendar", description: "Create, update, and delete your calendar events through the API." },
+export const STANDARD_KEY_SCOPES: { value: ApiKeyScope; labelKey: TranslationKey; descriptionKey: TranslationKey }[] = [
+	{ value: "read", labelKey: "apiKeys.read.label", descriptionKey: "apiKeys.read.description" },
+	{ value: "send", labelKey: "apiKeys.send.label", descriptionKey: "apiKeys.send.description" },
+	{ value: "calendar:read", labelKey: "apiKeys.calendarRead.label", descriptionKey: "apiKeys.calendarRead.description" },
+	{ value: "calendar:write", labelKey: "apiKeys.calendarWrite.label", descriptionKey: "apiKeys.calendarWrite.description" },
 ];
 
 async function responseData(response: Response): Promise<{ error?: unknown; key?: string; apiKeys?: ManagedApiKey[] }> {

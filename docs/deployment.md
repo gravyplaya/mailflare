@@ -8,7 +8,7 @@ Set up Mailflare in three steps:
 
 1. **Deploy the app:** use the Deploy to Cloudflare button, set the app name to `mailflare`, and provide the required `CF_TOKEN`.
 2. **Complete setup:** open the deployed app and follow `/setup` to check the installation and create the first admin account.
-3. **Connect your domain:** add a domain managed by the same Cloudflare account. Mailflare configures email routing and, when available and selected, email sending before helping you create the first mailbox.
+3. **Connect your domain:** add a domain managed by the same Cloudflare account and choose which service receives its mail. Mailflare configures email routing and, when available and selected, email sending before helping you create the first mailbox. Resend and Amazon SES are alternatives to Cloudflare for receiving and sending; see [Sending and receiving providers](providers.md).
 
 
 ## Step 1: Setup CF_TOKEN
@@ -43,6 +43,14 @@ Paste only the token secret into the `CF_TOKEN` field in step 2. Do not include 
 5. Start the deployment and wait for Cloudflare to finish provisioning and deploying the Worker.
 
 
+### Optional Web Push configuration
+
+To enable background new-mail notifications, run `npm run push:keys` once and
+store `VAPID_PRIVATE_KEY` as a Worker secret. Configure `VAPID_PUBLIC_KEY` and
+`VAPID_SUBJECT` as Worker variables; the subject must be a `mailto:` URI or the
+public HTTPS URL of the installation. The same VAPID key pair should be kept
+across deployments so existing browser subscriptions remain valid.
+
 ## Step 3: Complete mailflare setup
 
 1. Open the URL of the deployed `mailflare` Worker.
@@ -59,7 +67,9 @@ Setup applies the committed migrations through the Worker's D1 binding before cr
 3. Choose the address for your first mailbox and finish setup.
 4. Open the inbox and send a test message to the new address.
 
-To connect more domains later, open **Admin → Domains**, select **New domain**, and enter the hostname. Mailflare configures Email Routing and Email Sending automatically.
+To connect more domains later, open **Admin → Domains**, select **New domain**, enter the hostname and choose the receiving service. With Cloudflare, Mailflare configures Email Routing and Email Sending automatically. With Resend or Amazon SES, add the provider's credentials and run its setup from the domain page; see [Sending and receiving providers](providers.md). The `CF_TOKEN` is still needed in every case, because Cloudflare manages the domain's DNS.
+
+Resend and SES receive mail by calling your app, so set `APP_URL` to the app's public HTTPS address before setting them up for receiving.
 
 Your inbox should be ready to send and receive emails
 

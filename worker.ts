@@ -17,11 +17,12 @@ import {
 	MAILFLARE_FORWARDED_HEADER,
 } from "./src/lib/email/account-forwarding";
 import { runScheduledDatabaseBackup } from "./src/lib/backups/runner";
-import { runFollowUpMaintenance } from "./src/lib/follow-ups/maintenance";
 import { processAgentDraftJob } from "./src/lib/agent/jobs/utils";
 import { runAgentMaintenance } from "./src/lib/agent/maintenance";
 import { runGmailSync } from "./src/lib/composio/sync";
 import { runGoogleCalendarSync } from "./src/lib/calendar/google-sync";
+import { runFollowUpMaintenance } from "./src/lib/follow-ups/maintenance";
+import { runTrashRetention } from "./src/lib/email/trash-retention";
 export { RealtimeHub } from "./src/lib/realtime/hub";
 
 export default {
@@ -132,5 +133,6 @@ export default {
 			ctx.waitUntil(runFollowUpMaintenance(env));
 		}
 		ctx.waitUntil(runAgentMaintenance(env));
+		ctx.waitUntil(runTrashRetention(env, new Date(controller.scheduledTime)));
 	},
 } satisfies ExportedHandler<CloudflareEnv>;

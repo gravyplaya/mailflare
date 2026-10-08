@@ -6,12 +6,14 @@ import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel } from "@/lib/mailboxes/access";
 import { createAuditLog } from "@/lib/mailboxes/audit";
+import { permanentlyDeleteMessages } from "@/lib/email/permanent-delete";
 import { applySpamFeedback } from "@/lib/spam/feedback";
 import type { BulkMessagePayload } from "./types";
 import {
 	getReadValueForBulkAction,
 	getStatusForBulkAction,
 	isAllowedBulkMessageAction,
+	isPermanentlyDeletableStatus,
 } from "./utils";
 
 export async function POST(request: Request) {
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
 		...(payload.action === "inbox" ? { done: false } : {}),
 	};
 
-	if (Object.keys(values).length === 0) {
+	if (payload.action !== "delete" && Object.keys(values).length === 0) {
 		return NextResponse.json({ error: "No changes requested" }, { status: 400 });
 	}
 
@@ -79,6 +81,14 @@ export async function POST(request: Request) {
 
 	if (allowedMessageIds.length === 0) {
 		return NextResponse.json({ error: "No accessible messages" }, { status: 404 });
+	}
+	if (payload.action === "delete") {
+		// Only mail already in Trash or Spam can be destroyed; anything else is skipped.
+		const deletable = selectedMessages.filter(
+			(message) => allowedMessageIds.includes(message.id) && isPermanentlyDeletableStatus(message.status),
+		);
+		const deleted = await permanentlyDeleteMessages(env, db, user.id, deletable, "bulk");
+		return NextResponse.json({ ok: true, deleted, skipped: allowedMessageIds.length - deleted });
 	}
 	if (payload.action === "spam") {
 		for (const messageId of allowedMessageIds) await applySpamFeedback(env, user, messageId, "spam");

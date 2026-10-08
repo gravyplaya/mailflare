@@ -465,8 +465,15 @@ button {
 /* HTML emails assume a white background: keep them on light "paper" inside the dark theme */
 .dark .email-body {
 	color-scheme: light;
-	background: #fff;
-	color: #202124;
+	/* background: #fff; */
+	/* color: #202124; */
 	border-radius: 0.75rem;
 	padding: 1rem;
+}
+
+/* On phones the settings/admin body is already white and padded, so white cards drop their own side padding to line up with the page header. */
+@media (max-width: 767px) {
+	.page-flush :is(.bg-white.p-6, .bg-white.p-5) {
+		padding-inline: 0;
+	}
 }

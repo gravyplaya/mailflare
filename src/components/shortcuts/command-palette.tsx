@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Search, CornerDownLeft } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import type { CommandItem } from "./types";
+import type { TranslationKey } from "@/lib/i18n/types";
 import { filterCommands, groupCommandsByCategory } from "./command-palette-utils";
 import { CommandPaletteItem } from "./command-palette-item";
 
@@ -19,6 +21,7 @@ function CommandPaletteDialog({
   onClose: () => void;
   commands: CommandItem[];
 }) {
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +86,7 @@ function CommandPaletteDialog({
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Type a command or search actions..."
+            placeholder={t("palette.placeholder")}
             className="w-full bg-transparent text-neutral-900 placeholder-neutral-400 text-[15px] focus:outline-none"
           />
           <kbd className="px-2 py-0.5 text-xs font-semibold text-neutral-400 bg-neutral-100 border border-neutral-200 rounded-md shadow-2xs">
@@ -95,13 +98,13 @@ function CommandPaletteDialog({
         <div className="max-h-80 overflow-y-auto p-2">
           {filteredCommands.length === 0 ? (
             <div className="p-8 text-center text-sm text-neutral-400">
-              No matching commands found for &ldquo;{query}&rdquo;
+              {t("palette.noMatch", { query })}
             </div>
           ) : (
             Object.entries(grouped).map(([category, items]) => (
               <div key={category} className="mb-2 last:mb-0">
                 <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-                  {category}
+                  {t(`shortcut.category.${category}` as TranslationKey)}
                 </div>
                 {items.map((item) => {
                   const isCurrent = flatIndex === activeIndex;
@@ -133,14 +136,14 @@ function CommandPaletteDialog({
               <kbd className="px-1.5 py-0.5 bg-neutral-200 rounded mr-1 text-[10px]">
                 ↑↓
               </kbd>
-              to navigate
+              {t("palette.navigate")}
             </span>
             <span className="flex items-center">
               <CornerDownLeft className="w-3 h-3 mr-1 inline" />
-              to select
+              {t("palette.select")}
             </span>
           </div>
-          <span className="text-[11px]">Mailflare Actions</span>
+          <span className="text-[11px]">{t("palette.actions")}</span>
         </div>
       </div>
     </div>

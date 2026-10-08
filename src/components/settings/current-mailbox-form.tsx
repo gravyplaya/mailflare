@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { ProfileAvatarForm } from "./profile-avatar-form";
 import { getMailboxAddress, updateCurrentMailboxName } from "./utils";
 
 export function CurrentMailboxForm() {
+	const { t } = useLanguage();
 	const { selectedMailbox, setSelectedMailbox, isLoading } = useSelectedMailbox();
 	const [displayName, setDisplayName] = useState("");
 	const [savedDisplayName, setSavedDisplayName] = useState("");
@@ -37,9 +39,9 @@ export function CurrentMailboxForm() {
 			setSelectedMailbox(updated);
 			setSavedDisplayName(updated.displayName ?? "");
 			setDisplayName(updated.displayName ?? "");
-			setStatus("Saved");
+			setStatus(t("common.saved"));
 		} catch (err) {
-			setStatus(err instanceof Error ? err.message : "Failed to update mailbox");
+			setStatus(err instanceof Error ? err.message : t("settings.mailbox.updateFailed"));
 		} finally {
 			setSaving(false);
 		}
@@ -63,10 +65,10 @@ export function CurrentMailboxForm() {
 	if (!selectedMailbox) {
 		return (
 			<div className="space-y-6">
-				<h1 className="text-3xl font-medium text-neutral-900">Settings</h1>
+				<h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("settings.mailbox.title")}</h1>
 				<Card className="rounded-3xl border-0 bg-white p-6">
 					<CardContent className="p-6 text-sm text-neutral-500">
-						Select a mailbox to view its settings.
+						{t("settings.mailbox.selectToView")}
 					</CardContent>
 				</Card>
 			</div>
@@ -79,7 +81,7 @@ export function CurrentMailboxForm() {
 	return (
 		<div className="space-y-8">
 			<div>
-				<h1 className="text-3xl font-medium text-neutral-900">Settings</h1>
+				<h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("settings.mailbox.title")}</h1>
 				<p className="mt-1 text-sm text-neutral-500">{address}</p>
 			</div>
 
@@ -92,7 +94,7 @@ export function CurrentMailboxForm() {
 					/>
 					<form onSubmit={onSubmit} className="space-y-4">
 						<div className="space-y-2">
-							<Label htmlFor="displayName">Name</Label>
+							<Label htmlFor="displayName">{t("common.name")}</Label>
 							<Input
 								id="displayName"
 								value={displayName}
@@ -104,7 +106,7 @@ export function CurrentMailboxForm() {
 						<div className="flex items-center gap-3">
 							<Button type="submit" disabled={saving || !hasChanges}>
 								<Save className="h-4 w-4" />
-								{saving ? "Saving..." : "Save changes"}
+								{saving ? t("common.saving") : t("settings.mailbox.saveChanges")}
 							</Button>
 							{status && <p className="text-sm text-neutral-500">{status}</p>}
 						</div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Copy, ShieldCheck, ShieldOff } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import { beginMfaEnrollment, confirmMfaEnrollment, disableMfa, loadMfaStatus, re
  * asks for both factors again.
  */
 export function MfaSettings() {
+	const { t } = useLanguage();
 	const [status, setStatus] = useState<MfaStatusResponse | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [enrollOpen, setEnrollOpen] = useState(false);
@@ -23,14 +25,14 @@ export function MfaSettings() {
 	const [codesOpen, setCodesOpen] = useState(false);
 
 	useEffect(() => {
-		loadMfaStatus().then(setStatus).catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
-	}, []);
+		loadMfaStatus().then(setStatus).catch((err) => setError(err instanceof Error ? err.message : t("mfa.loadFailed")));
+	}, [t]);
 
 	async function refresh() {
 		setStatus(await loadMfaStatus());
 	}
 
-	if (!status) return <p className="text-sm text-neutral-500">{error ?? "Loading two-factor settings..."}</p>;
+	if (!status) return <p className="text-sm text-neutral-500">{error ?? t("mfa.loading")}</p>;
 
 	return (
 		<div className="space-y-4">
@@ -42,12 +44,12 @@ export function MfaSettings() {
 				)}
 				<div className="min-w-0 flex-1">
 					<p className="text-sm font-medium text-neutral-900">
-						{status.enabled ? "Two-factor authentication is on" : "Two-factor authentication is off"}
+						{status.enabled ? t("mfa.on") : t("mfa.off")}
 					</p>
 					<p className="mt-1 text-sm text-neutral-500">
 						{status.enabled
-							? `Signing in asks for a code from your authenticator app. ${status.recoveryCodesLeft} recovery code${status.recoveryCodesLeft === 1 ? "" : "s"} left.`
-							: "Add a second step at sign-in using an authenticator app such as 1Password, Google Authenticator or Authy."}
+							? t("mfa.onDescription", { count: status.recoveryCodesLeft })
+							: t("mfa.offDescription")}
 					</p>
 				</div>
 			</div>
@@ -55,14 +57,14 @@ export function MfaSettings() {
 				{status.enabled ? (
 					<>
 						<Button variant="outline" onClick={() => setCodesOpen(true)}>
-							New recovery codes
+							{t("mfa.newRecoveryCodes")}
 						</Button>
 						<Button variant="outline" onClick={() => setDisableOpen(true)}>
-							Turn off
+							{t("mfa.turnOff")}
 						</Button>
 					</>
 				) : (
-					<Button onClick={() => setEnrollOpen(true)}>Turn on two-factor</Button>
+					<Button onClick={() => setEnrollOpen(true)}>{t("mfa.turnOn")}</Button>
 				)}
 			</div>
 
@@ -74,6 +76,7 @@ export function MfaSettings() {
 }
 
 function RecoveryCodesList({ codes }: { codes: string[] }) {
+	const { t } = useLanguage();
 	const [copied, setCopied] = useState(false);
 	return (
 		<div className="space-y-3">
@@ -91,16 +94,17 @@ function RecoveryCodesList({ codes }: { codes: string[] }) {
 				}}
 			>
 				<Copy className="h-4 w-4" />
-				{copied ? "Copied" : "Copy codes"}
+				{copied ? t("common.copied") : t("mfa.copyCodes")}
 			</Button>
 			<p className="text-xs text-neutral-500">
-				Each code works once. Keep them somewhere safe; they are the only way in if you lose your authenticator.
+				{t("mfa.codesHint")}
 			</p>
 		</div>
 	);
 }
 
 function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (open: boolean) => void; onDone: () => Promise<void> }) {
+	const { t } = useLanguage();
 	const [step, setStep] = useState<MfaDialogStep>("password");
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
@@ -132,7 +136,7 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 			setSecret(enrollment.secret);
 			setStep("scan");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not start");
+			setError(err instanceof Error ? err.message : t("mfa.startFailed"));
 		} finally {
 			setBusy(false);
 		}
@@ -147,7 +151,7 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 			setStep("codes");
 			await onDone();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not confirm");
+			setError(err instanceof Error ? err.message : t("mfa.confirmFailed"));
 		} finally {
 			setBusy(false);
 		}
@@ -165,26 +169,26 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 				{step === "password" && (
 					<form onSubmit={start} className="space-y-4">
 						<DialogHeader>
-							<DialogTitle>Turn on two-factor authentication</DialogTitle>
-							<DialogDescription>Confirm your password to begin.</DialogDescription>
+							<DialogTitle>{t("mfa.enrollTitle")}</DialogTitle>
+							<DialogDescription>{t("mfa.enrollDescription")}</DialogDescription>
 						</DialogHeader>
 						<div className="space-y-2">
-							<Label htmlFor="mfa-password">Password</Label>
+							<Label htmlFor="mfa-password">{t("common.password")}</Label>
 							<Input id="mfa-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />
 						</div>
 						{error && <p className="text-sm text-red-600">{error}</p>}
-						<Button type="submit" disabled={busy}>{busy ? "Please wait..." : "Continue"}</Button>
+						<Button type="submit" disabled={busy}>{busy ? t("common.pleaseWait") : t("common.continue")}</Button>
 					</form>
 				)}
 				{step === "scan" && (
 					<form onSubmit={confirm} className="space-y-4">
 						<DialogHeader>
-							<DialogTitle>Scan the code</DialogTitle>
-							<DialogDescription>Open your authenticator app, add an account by scanning this code, then enter the 6-digit code it shows.</DialogDescription>
+							<DialogTitle>{t("mfa.scanTitle")}</DialogTitle>
+							<DialogDescription>{t("mfa.scanDescription")}</DialogDescription>
 						</DialogHeader>
 						<div className="mx-auto w-48 rounded-xl border border-neutral-200 bg-white p-2" dangerouslySetInnerHTML={{ __html: qrSvg }} />
 						<details className="text-xs text-neutral-500">
-							<summary className="cursor-pointer">Can&apos;t scan? Enter the key manually</summary>
+							<summary className="cursor-pointer">{t("mfa.cantScan")}</summary>
 							<code className="mt-2 block break-all rounded-md bg-neutral-50 p-2 font-mono text-neutral-800">{secret}</code>
 							<Button
 								type="button"
@@ -206,21 +210,21 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 							Your authenticator&apos;s key must end in <code className="rounded bg-neutral-100 px-1 font-mono">{secret.slice(-4)}</code>. If it ends in anything else, it is an entry from an earlier attempt: delete it and add this key again.
 						</p>
 						<div className="space-y-2">
-							<Label htmlFor="mfa-code">6-digit code</Label>
+							<Label htmlFor="mfa-code">{t("mfa.sixDigitCode")}</Label>
 							<Input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123 456" required autoFocus />
 						</div>
 						{error && <p className="text-sm text-red-600">{error}</p>}
-						<Button type="submit" disabled={busy}>{busy ? "Checking..." : "Verify and turn on"}</Button>
+						<Button type="submit" disabled={busy}>{busy ? t("mfa.checking") : t("mfa.verifyAndTurnOn")}</Button>
 					</form>
 				)}
 				{step === "codes" && (
 					<div className="space-y-4">
 						<DialogHeader>
-							<DialogTitle>Save your recovery codes</DialogTitle>
-							<DialogDescription>Two-factor authentication is on. Other sessions have been signed out.</DialogDescription>
+							<DialogTitle>{t("mfa.saveCodesTitle")}</DialogTitle>
+							<DialogDescription>{t("mfa.saveCodesDescription")}</DialogDescription>
 						</DialogHeader>
 						<RecoveryCodesList codes={recoveryCodes} />
-						<Button type="button" onClick={() => onOpenChange(false)}>Done</Button>
+						<Button type="button" onClick={() => onOpenChange(false)}>{t("common.done")}</Button>
 					</div>
 				)}
 			</DialogContent>
@@ -229,6 +233,7 @@ function EnrollDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
 }
 
 function DisableDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (open: boolean) => void; onDone: () => Promise<void> }) {
+	const { t } = useLanguage();
 	const [password, setPassword] = useState("");
 	const [code, setCode] = useState("");
 	const [error, setError] = useState<string | null>(null);
@@ -245,7 +250,7 @@ function DisableDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
 			setPassword("");
 			setCode("");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not turn off");
+			setError(err instanceof Error ? err.message : t("mfa.turnOffFailed"));
 		} finally {
 			setBusy(false);
 		}
@@ -256,19 +261,19 @@ function DisableDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
 			<DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-[480px]">
 				<form onSubmit={submit} className="space-y-4">
 					<DialogHeader>
-						<DialogTitle>Turn off two-factor authentication</DialogTitle>
-						<DialogDescription>Confirm your password and a current code or recovery code.</DialogDescription>
+						<DialogTitle>{t("mfa.turnOffTitle")}</DialogTitle>
+						<DialogDescription>{t("mfa.turnOffDescription")}</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-2">
-						<Label htmlFor="mfa-off-password">Password</Label>
+						<Label htmlFor="mfa-off-password">{t("common.password")}</Label>
 						<Input id="mfa-off-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
 					</div>
 					<div className="space-y-2">
-						<Label htmlFor="mfa-off-code">Code</Label>
+						<Label htmlFor="mfa-off-code">{t("mfa.code")}</Label>
 						<Input id="mfa-off-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required />
 					</div>
 					{error && <p className="text-sm text-red-600">{error}</p>}
-					<Button type="submit" variant="destructive" disabled={busy}>{busy ? "Please wait..." : "Turn off"}</Button>
+					<Button type="submit" variant="destructive" disabled={busy}>{busy ? t("common.pleaseWait") : t("mfa.turnOff")}</Button>
 				</form>
 			</DialogContent>
 		</Dialog>
@@ -276,6 +281,7 @@ function DisableDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
 }
 
 function RecoveryCodesDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (open: boolean) => void; onDone: () => Promise<void> }) {
+	const { t } = useLanguage();
 	const [password, setPassword] = useState("");
 	const [codes, setCodes] = useState<string[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -290,7 +296,7 @@ function RecoveryCodesDialog({ open, onOpenChange, onDone }: { open: boolean; on
 			setPassword("");
 			await onDone();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not generate codes");
+			setError(err instanceof Error ? err.message : t("mfa.generateFailed"));
 		} finally {
 			setBusy(false);
 		}
@@ -308,24 +314,24 @@ function RecoveryCodesDialog({ open, onOpenChange, onDone }: { open: boolean; on
 				{codes ? (
 					<div className="space-y-4">
 						<DialogHeader>
-							<DialogTitle>Your new recovery codes</DialogTitle>
-							<DialogDescription>The previous codes no longer work.</DialogDescription>
+							<DialogTitle>{t("mfa.newCodesTitle")}</DialogTitle>
+							<DialogDescription>{t("mfa.newCodesDescription")}</DialogDescription>
 						</DialogHeader>
 						<RecoveryCodesList codes={codes} />
-						<Button type="button" onClick={() => onOpenChange(false)}>Done</Button>
+						<Button type="button" onClick={() => onOpenChange(false)}>{t("common.done")}</Button>
 					</div>
 				) : (
 					<form onSubmit={submit} className="space-y-4">
 						<DialogHeader>
-							<DialogTitle>Generate new recovery codes</DialogTitle>
-							<DialogDescription>This replaces every existing code. Confirm your password to continue.</DialogDescription>
+							<DialogTitle>{t("mfa.generateTitle")}</DialogTitle>
+							<DialogDescription>{t("mfa.generateDescription")}</DialogDescription>
 						</DialogHeader>
 						<div className="space-y-2">
-							<Label htmlFor="rc-password">Password</Label>
+							<Label htmlFor="rc-password">{t("common.password")}</Label>
 							<Input id="rc-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />
 						</div>
 						{error && <p className="text-sm text-red-600">{error}</p>}
-						<Button type="submit" disabled={busy}>{busy ? "Please wait..." : "Generate"}</Button>
+						<Button type="submit" disabled={busy}>{busy ? t("common.pleaseWait") : t("mfa.generate")}</Button>
 					</form>
 				)}
 			</DialogContent>

@@ -18,4 +18,5 @@ export type AgentProviderPublicConfig = Omit<AgentProviderConfig, "apiKey"> & {
 	configured: boolean;
 };
 
-export type AgentModelOption = { id: string; name: string };
+// rates are USD per 1M tokens, present only when the provider's own model catalog publishes pricing.
+export type AgentModelOption = { id: string; name: string; rates?: AgentModelRates };

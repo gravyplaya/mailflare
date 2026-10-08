@@ -302,6 +302,34 @@
       "when": 1788850800014,
       "tag": "0050_add_show_full_recipient_addresses",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1788850800015,
+      "tag": "0051_add_outbound_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1788850800016,
+      "tag": "0052_add_receiving_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1788850800017,
+      "tag": "0053_add_trash_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1788850800018,
+      "tag": "0054_add_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }

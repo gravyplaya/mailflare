@@ -28,6 +28,26 @@ Update the token so it can read the zone and manage its DNS, Email Routing setti
 
 Cloudflare Email Routing cannot be enabled while another mail provider's MX records are present. Mailflare shows a confirmation before replacing them. Continuing deletes the existing MX records and points incoming mail to Cloudflare Email Routing, so the previous provider will stop receiving mail. The `CF_TOKEN` needs **DNS Edit** permission for this action.
 
+## Resend or SES domain stays "not verified"
+
+The status is the provider's own, not Mailflare's. After the DNS records are added it can stay pending for several minutes (Resend and SES check public DNS, not Cloudflare's dashboard), and **Check status** re-asks the provider without creating anything. If one record stays stuck, look at the per-record statuses listed under the domain row, then check for a duplicate or older TXT record on the same name, a CNAME that is proxied through Cloudflare (it must be DNS only), or a record created at the wrong name (`send.example.com.example.com`). `dig TXT resend._domainkey.example.com +short` shows what the public sees.
+
+## "This domain has MX records for another mail service"
+
+Only one service can own a domain's MX records. Setting up a receiving provider shows the records it would replace and waits for your confirmation; confirming means the previous service stops receiving mail for that domain.
+
+## Resend says the key can only send mail
+
+A sending-only Resend key cannot add domains or webhooks. Replace it with a full-access key under the domain's Resend card, or add the domain in the Resend dashboard yourself (and, for receiving, create an `email.received` webhook pointing at `/api/inbound/resend`).
+
+## SES receiving setup fails
+
+- **Region.** SES receives mail only in some regions. Use one such as us-east-1, us-west-2 or eu-west-1.
+- **Public address.** SNS must reach `/api/inbound/ses`, so `APP_URL` has to be a public HTTPS address; localhost does not work.
+- **Permissions.** The AWS card lists the permissions the key lacks, with the IAM policy that grants them. Use **Re-check** after attaching it.
+- **Sandbox.** An account in the SES sandbox can send only to verified addresses. Request production access in the SES console.
+- **Subscription pending.** The SNS subscription confirms itself when SNS calls the endpoint; the checklist shows it as not ready until then. Use **Check again** after a minute.
+
 ## D1 error 7404: Database could not be found
 
 D1 database IDs belong to a specific Cloudflare account. This error commonly means `wrangler.jsonc` contains an ID copied from another account.
@@ -57,3 +77,4 @@ Confirm that:
 - `services[].service` in `wrangler.jsonc` is also `mailflare`.
 - Email Routing is enabled for the domain in Cloudflare.
 - The mailbox has an Email Routing rule pointing to the Worker.
+- If the domain receives through Resend or Amazon SES instead, its receiving checklist is all green, the MX record points at that provider, and `APP_URL` is a public HTTPS address.

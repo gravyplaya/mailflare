@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { Switch } from "@/components/ui/switch";
 import {
 	areBrowserNotificationsEnabled,
@@ -8,6 +9,7 @@ import {
 } from "@/hooks/message-realtime-utils";
 
 export function BrowserNotificationSettings() {
+	const { t } = useLanguage();
 	const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
 	const [enabled, setEnabled] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -30,9 +32,9 @@ export function BrowserNotificationSettings() {
 		<div>
 			<label className="flex items-start gap-3 rounded-xl bg-neutral-50 p-4">
 				<span className="flex-1">
-					<span className="block text-sm font-medium text-neutral-900">Browser notifications</span>
+					<span className="block text-sm font-medium text-neutral-900">{t("settings.notifications.title")}</span>
 					<span className="mt-1 block text-sm text-neutral-500">
-						Show a notification for new email while Mailflare is open in a background tab.
+						{t("settings.notifications.description")}
 					</span>
 				</span>
 				<Switch
@@ -45,7 +47,7 @@ export function BrowserNotificationSettings() {
 								setBrowserNotificationsEnabled(false);
 								setEnabled(false);
 							} catch {
-								setError("Could not save the notification preference in this browser.");
+								setError(t("settings.notifications.saveFailed"));
 							}
 							return;
 						}
@@ -57,18 +59,18 @@ export function BrowserNotificationSettings() {
 								setBrowserNotificationsEnabled(true);
 								setEnabled(true);
 							} catch {
-								setError("Could not enable browser notifications.");
+								setError(t("settings.notifications.enableFailed"));
 							}
 						})();
 					}}
-					aria-label="Enable browser notifications"
+					aria-label={t("settings.notifications.enable")}
 				/>
 			</label>
 			{permission === "denied" && (
-				<p className="mt-2 px-4 text-sm text-neutral-500">Notifications are blocked. Allow them in your browser&apos;s site settings to enable this option.</p>
+				<p className="mt-2 px-4 text-sm text-neutral-500">{t("settings.notifications.blocked")}</p>
 			)}
 			{permission === "unsupported" && (
-				<p className="mt-2 px-4 text-sm text-neutral-500">Browser notifications are unavailable here.</p>
+				<p className="mt-2 px-4 text-sm text-neutral-500">{t("settings.notifications.unavailable")}</p>
 			)}
 			{error && <p className="mt-2 px-4 text-sm text-red-600">{error}</p>}
 		</div>

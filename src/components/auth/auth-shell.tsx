@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
+import { LanguageSelector } from "@/components/language-selector";
 import type { AuthShellProps } from "./types";
 
 export function AuthShell({
@@ -78,6 +79,9 @@ export function AuthShell({
             </div>
           )}
           <div className="w-full">{children}</div>
+          <div className="mt-8 max-w-48">
+            <LanguageSelector />
+          </div>
           {footer && (
             <div className="mt-8 text-sm font-medium text-blue-700">
               {footer}

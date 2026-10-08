@@ -40,6 +40,16 @@ export async function removeMxRecords(
 	}
 }
 
+/** MX records on `hostname` that point somewhere other than Cloudflare Email Routing. */
+export async function listConflictingMxRecords(
+	env: CloudflareEnv,
+	zoneId: string,
+	hostname: string,
+): Promise<CfDnsRecord[]> {
+	const records = await listMxRecords(env, zoneId, hostname);
+	return records.filter((record) => !isCloudflareEmailRoutingMx(record));
+}
+
 export async function hasConflictingMxRecords(
 	env: CloudflareEnv,
 	zoneId: string,

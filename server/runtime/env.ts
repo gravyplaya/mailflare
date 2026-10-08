@@ -67,6 +67,9 @@ export function createNodeRuntime(): NodeRuntime {
 		MAILFLARE_RUNTIME: "node",
 		APP_URL: optional("APP_URL")?.replace(/\/$/, ""),
 		INBOUND_WEBHOOK_SECRET: optional("INBOUND_WEBHOOK_SECRET"),
+		VAPID_PUBLIC_KEY: optional("VAPID_PUBLIC_KEY"),
+		VAPID_PRIVATE_KEY: optional("VAPID_PRIVATE_KEY"),
+		VAPID_SUBJECT: optional("VAPID_SUBJECT"),
 	} as unknown as CloudflareEnv;
 	realtime.bindEnv(env);
 

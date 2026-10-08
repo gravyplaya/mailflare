@@ -24,7 +24,7 @@ export function getAttachmentVisual(
 		return {
 			icon: Image,
 			iconClassName: "bg-blue-50 text-blue-700",
-			label: "Image",
+			labelKey: "attachment.image",
 			thumbnail: "image",
 		};
 	}
@@ -32,7 +32,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileVideoCamera,
 			iconClassName: "bg-rose-50 text-rose-700",
-			label: "Video",
+			labelKey: "attachment.video",
 			thumbnail: "video",
 		};
 	}
@@ -40,7 +40,7 @@ export function getAttachmentVisual(
 		return {
 			icon: Music,
 			iconClassName: "bg-orange-50 text-orange-700",
-			label: "Audio",
+			labelKey: "attachment.audio",
 			thumbnail: null,
 		};
 	}
@@ -48,7 +48,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileText,
 			iconClassName: "bg-red-50 text-red-700",
-			label: "PDF",
+			labelKey: "attachment.pdf",
 			thumbnail: null,
 		};
 	}
@@ -61,7 +61,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileSpreadsheet,
 			iconClassName: "bg-emerald-50 text-emerald-700",
-			label: "Spreadsheet",
+			labelKey: "attachment.spreadsheet",
 			thumbnail: null,
 		};
 	}
@@ -73,7 +73,7 @@ export function getAttachmentVisual(
 		return {
 			icon: Presentation,
 			iconClassName: "bg-amber-50 text-amber-700",
-			label: "Presentation",
+			labelKey: "attachment.presentation",
 			thumbnail: null,
 		};
 	}
@@ -86,7 +86,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileArchive,
 			iconClassName: "bg-violet-50 text-violet-700",
-			label: "Archive",
+			labelKey: "attachment.archive",
 			thumbnail: null,
 		};
 	}
@@ -100,7 +100,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileCode,
 			iconClassName: "bg-cyan-50 text-cyan-700",
-			label: "Code",
+			labelKey: "attachment.code",
 			thumbnail: null,
 		};
 	}
@@ -108,7 +108,7 @@ export function getAttachmentVisual(
 		return {
 			icon: FileType,
 			iconClassName: "bg-sky-50 text-sky-700",
-			label: "Document",
+			labelKey: "attachment.document",
 			thumbnail: null,
 		};
 	}
@@ -116,7 +116,7 @@ export function getAttachmentVisual(
 	return {
 		icon: FileText,
 		iconClassName: "bg-neutral-100 text-neutral-600",
-		label: "File",
+		labelKey: "attachment.file",
 		thumbnail: null,
 	};
 }

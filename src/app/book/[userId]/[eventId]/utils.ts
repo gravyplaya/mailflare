@@ -1,3 +1,5 @@
+import { getDisplayLocale } from "@/lib/time/utils";
+import { defaultTranslator } from "@/lib/i18n/utils";
 import type { BookingSlot } from "../types";
 import { isValidTimeZone } from "@/lib/time/utils";
 import type { BookingPageSelection } from "./types";
@@ -46,7 +48,7 @@ export function moveMonth(month: string, offset: number): string {
 }
 
 export function formatCalendarDate(date: string, options: Intl.DateTimeFormatOptions): string {
-	return new Intl.DateTimeFormat(undefined, { ...options, timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
+	return new Intl.DateTimeFormat(getDisplayLocale(), { ...options, timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 }
 
 export function bookingTimeZones(eventTimeZone: string, selectedTimeZone: string): string[] {
@@ -57,5 +59,5 @@ export function bookingTimeZones(eventTimeZone: string, selectedTimeZone: string
 export async function submitPublicBooking(endpoint: string, startsAt: string, name: string, email: string, guestEmails: string, notes: string): Promise<void> {
 	const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startsAt, name, email, guestEmails, notes }) });
 	const data = await response.json() as { error?: string };
-	if (!response.ok) throw new Error(data.error ?? "Could not book this time.");
+	if (!response.ok) throw new Error(data.error ?? defaultTranslator("public.bookFailedShort"));
 }

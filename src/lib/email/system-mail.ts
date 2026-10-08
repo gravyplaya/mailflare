@@ -1,7 +1,8 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
 import { formatEmailAddress } from "@/lib/email/address";
+import { getOutboundProviderConfig, sendThroughProvider } from "@/lib/email/outbound-provider";
 import type { SystemMailInput } from "@/lib/email/system-mail-types";
 
 /**
@@ -14,12 +15,13 @@ import type { SystemMailInput } from "@/lib/email/system-mail-types";
  * send from, and the caller decides what to tell the user.
  */
 export async function sendSystemEmail(env: CloudflareEnv, input: SystemMailInput): Promise<boolean> {
-	const sender = await pickSystemSender(env);
+	const sender = await pickSystemSender(env, input.hostname);
 	if (!sender) return false;
 
-	await env.EMAIL.send({
-		from: formatEmailAddress(sender.address, sender.name),
-		to: input.to,
+	const from = formatEmailAddress(sender.address, sender.name);
+	await sendThroughProvider(env, await getOutboundProviderConfig(env, from), {
+		from,
+		to: [input.to],
 		subject: input.subject,
 		text: input.text,
 		html: input.html,
@@ -31,7 +33,10 @@ export async function sendSystemEmail(env: CloudflareEnv, input: SystemMailInput
 	return true;
 }
 
-export async function pickSystemSender(env: CloudflareEnv): Promise<{ address: string; name: string } | null> {
+export async function pickSystemSender(
+	env: CloudflareEnv,
+	hostname?: string,
+): Promise<{ address: string; name: string } | null> {
 	const db = getDb(env);
 	const rows = await db
 		.select({
@@ -39,14 +44,24 @@ export async function pickSystemSender(env: CloudflareEnv): Promise<{ address: s
 			displayName: mailboxes.displayName,
 			hostname: domains.hostname,
 			role: users.role,
+			provider: domains.sendingProvider,
+			cloudflareSending: domains.sendingEnabled,
 		})
 		.from(mailboxes)
 		.innerJoin(domains, eq(mailboxes.domainId, domains.id))
 		.innerJoin(users, eq(mailboxes.userId, users.id))
-		.where(and(eq(domains.sendingEnabled, true), eq(mailboxes.disabled, false), eq(users.disabled, false)))
+		.where(and(
+			ne(domains.sendingProvider, "none"),
+			...(hostname ? [eq(domains.hostname, hostname.toLowerCase())] : []),
+			eq(mailboxes.disabled, false),
+			eq(users.disabled, false),
+		))
 		.orderBy(asc(mailboxes.createdAt))
 		.limit(50);
-	const chosen = rows.find((row) => row.role === "admin") ?? rows[0];
+	// Cloudflare sending only works once the zone's sending subdomain is enabled;
+	// Resend is verified per domain in Resend itself.
+	const usable = rows.filter((row) => row.provider !== "cloudflare" || row.cloudflareSending);
+	const chosen = usable.find((row) => row.role === "admin") ?? usable[0];
 	if (!chosen) return null;
 	return { address: `${chosen.localPart}@${chosen.hostname}`, name: chosen.displayName ?? "Mailflare" };
 }

@@ -42,14 +42,14 @@ export async function POST(request: Request) {
 	}
 
 	try {
-		const rawMessages = await fetchImapMessages(input);
+		const { messages: rawMessages, total, nextOffset } = await fetchImapMessages(input);
 		const result = await importMessagesToMailbox(env, {
 			userId: getImportMessageUserId(input.destination, user.id, access.mailbox.userId),
 			mailboxId: access.mailbox.id,
 			destination: input.destination,
 			messages: rawMessages,
 		});
-		return NextResponse.json(result);
+		return NextResponse.json({ ...result, total, nextOffset });
 	} catch (error) {
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "IMAP import failed" },

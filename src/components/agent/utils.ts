@@ -1,3 +1,4 @@
+import type { Translator } from "../../lib/i18n/utils";
 import type { KeyboardEvent } from "react";
 import type { AgentActionProposal, AgentDraftAction, AgentEmailReference, AgentEvent, AgentMessage, AgentTurn, QueuedAgentMessage } from "./types";
 
@@ -154,26 +155,16 @@ export function formatAgentDuration(durationMs: number): string {
 	return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
-export const AGENT_TOOL_LABELS: Record<string, { running: string; completed: string; description: string }> = {
-	list_emails: { running: "Listing emails...", completed: "Listed emails", description: "Listed email in the selected mailbox folder." },
-	get_email: { running: "Reading email...", completed: "Read email", description: "Read an email and its attachment details." },
-	get_thread: { running: "Reading thread...", completed: "Read thread", description: "Read the conversation containing an email." },
-	search_emails: { running: "Searching emails...", completed: "Searched email", description: "Searched email subjects and bodies in this mailbox." },
-	draft_email: { running: "Drafting email...", completed: "Drafted email", description: "Saved a new email draft for review. No email was sent." },
-	draft_reply: { running: "Drafting reply...", completed: "Drafted reply", description: "Saved a reply draft for review. No email was sent." },
-	mark_email_read: { running: "Preparing read status...", completed: "Prepared read status", description: "Prepared an email read status change for approval." },
-	move_email: { running: "Preparing email move...", completed: "Prepared email move", description: "Prepared an email move for approval." },
-	move_emails: { running: "Preparing email moves...", completed: "Prepared email moves", description: "Prepared email moves for approval." },
-	discard_draft: { running: "Preparing draft removal...", completed: "Prepared draft removal", description: "Prepared an assistant draft removal for approval." },
-	get_schedule: { running: "Getting schedule...", completed: "Got schedule", description: "Read calendar events in the requested range." },
-	search_events: { running: "Searching events...", completed: "Searched events", description: "Searched calendar events." },
-	get_event: { running: "Reading event...", completed: "Read event", description: "Read a calendar event." },
-	create_event: { running: "Creating event...", completed: "Created event", description: "Created a calendar event." },
-	update_events: { running: "Updating events...", completed: "Updated events", description: "Updated calendar events." },
-	delete_events: { running: "Deleting events...", completed: "Deleted events", description: "Deleted calendar events." },
-	find_free_time: { running: "Finding free time...", completed: "Found free time", description: "Checked calendar availability." },
-	get_calendars: { running: "Getting calendars...", completed: "Got calendars", description: "Listed available calendars." },
-};
+export const AGENT_TOOL_NAMES = [
+	"list_emails", "get_email", "get_thread", "search_emails", "draft_email", "draft_reply", "mark_email_read", "move_email", "move_emails",
+	"discard_draft", "get_schedule", "search_events", "get_event", "create_event", "update_events", "delete_events", "find_free_time", "get_calendars",
+] as const;
+
+type AgentToolName = typeof AGENT_TOOL_NAMES[number];
+
+function agentToolText(name: string | null | undefined, part: "running" | "completed" | "description", t: Translator): string | null {
+	return (AGENT_TOOL_NAMES as readonly string[]).includes(name ?? "") ? t(`agent.tool.${name as AgentToolName}.${part}`) : null;
+}
 
 export function activeAgentTool(messages: AgentMessage[]): AgentMessage | null {
 	for (let index = messages.length - 1; index >= 0; index--) {
@@ -184,8 +175,8 @@ export function activeAgentTool(messages: AgentMessage[]): AgentMessage | null {
 	return null;
 }
 
-export function activeAgentToolLabel(name: string | null | undefined): string {
-	return AGENT_TOOL_LABELS[name ?? ""]?.running ?? "Using tool...";
+export function activeAgentToolLabel(name: string | null | undefined, t: Translator): string {
+	return agentToolText(name, "running", t) ?? t("agent.tool.using");
 }
 
 export function agentEmailHref(email: Pick<AgentEmailReference, "id" | "status" | "url">): string {
@@ -216,15 +207,15 @@ export function agentActionProposal(content: string): AgentActionProposal | null
 	return value && (value.action === "move_email" || value.action === "move_emails" || value.action === "mark_email_read" || value.action === "discard_draft") && (value.status === "pending_approval" || value.status === "processing" || value.status === "approved") ? value as AgentActionProposal : null;
 }
 
-export function agentToolLabel(name: string | null | undefined, state: AgentMessage["toolState"], content: string): { label: string; description: string } {
+export function agentToolLabel(name: string | null | undefined, state: AgentMessage["toolState"], content: string, t: Translator): { label: string; description: string } {
 	const fallback = (name ?? "Tool").replace(/_/g, " ");
-	const display = AGENT_TOOL_LABELS[name ?? ""];
-	if (!display) return { label: fallback.charAt(0).toUpperCase() + fallback.slice(1), description: "Used an email tool." };
-	if (state === "running") return { label: display.running, description: display.description };
+	const description = agentToolText(name, "description", t);
+	if (description === null) return { label: fallback.charAt(0).toUpperCase() + fallback.slice(1), description: t("agent.tool.fallbackDescription") };
+	if (state === "running") return { label: agentToolText(name, "running", t)!, description };
 	const result = parseAgentToolContent(content);
 	const emails = Array.isArray(result?.emails) ? result.emails.length : typeof result?.id === "string" || typeof result?.emailId === "string" ? 1 : null;
-	if ((name === "search_emails" || name === "list_emails") && emails !== null) return { label: `${name === "search_emails" ? "Searched" : "Listed"} ${emails} ${emails === 1 ? "email" : "emails"}`, description: display.description };
-	if (name === "get_thread" && emails !== null) return { label: `Read ${emails} ${emails === 1 ? "email" : "emails"} in thread`, description: display.description };
-	if ((name === "move_emails" || name === "move_email") && emails !== null) return { label: `${result?.status === "approved" ? "Moved" : "Prepared"} ${emails} ${emails === 1 ? "email" : "emails"}${result?.status === "approved" ? "" : " for review"}`, description: display.description };
-	return { label: display.completed, description: display.description };
+	if ((name === "search_emails" || name === "list_emails") && emails !== null) return { label: t(name === "search_emails" ? "agent.tool.searchedCount" : "agent.tool.listedCount", { count: emails }), description };
+	if (name === "get_thread" && emails !== null) return { label: t("agent.tool.threadCount", { count: emails }), description };
+	if ((name === "move_emails" || name === "move_email") && emails !== null) return { label: t(result?.status === "approved" ? "agent.tool.movedCount" : "agent.tool.preparedCount", { count: emails }), description };
+	return { label: agentToolText(name, "completed", t)!, description };
 }

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSelectedMailbox } from "@/components/mailbox-provider";
@@ -64,6 +65,7 @@ export function MessageDetailNavigationProvider({ children, config }: MessageDet
 }
 
 export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavigationProps) {
+	const { t } = useLanguage();
 	const context = useContext(NavigationContext);
 	const router = useRouter();
 	useEffect(() => {
@@ -76,16 +78,16 @@ export function MessageDetailNavigation({ messageId, unread }: MessageDetailNavi
 		<div className="ml-auto flex shrink-0 items-center gap-2 text-neutral-500">
 			{totalUnread > 0 && (
 			<span className="mr-2 whitespace-nowrap text-xs" aria-live="polite">
-				{unreadOrder} of {totalUnread} unread
+				{t("message.nav.unreadPosition", { position: unreadOrder, total: totalUnread })}
 			</span>
 			)}
-			<Tooltip label="Newer email">
-				<Button type="button" variant="ghost" size="roundedSM" aria-label="Newer email" disabled={!previousId} onClick={() => previousId && router.push(`${context.hrefPrefix}/${previousId}`)}>
+			<Tooltip label={t("message.nav.newer")}>
+				<Button type="button" variant="ghost" size="roundedSM" aria-label={t("message.nav.newer")} disabled={!previousId} onClick={() => previousId && router.push(`${context.hrefPrefix}/${previousId}`)}>
 					<ChevronLeft size={18} />
 				</Button>
 			</Tooltip>
-			<Tooltip label="Older email">
-				<Button type="button" variant="ghost" size="roundedSM" aria-label="Older email" disabled={!nextId} onClick={() => nextId && router.push(`${context.hrefPrefix}/${nextId}`)}>
+			<Tooltip label={t("message.nav.older")}>
+				<Button type="button" variant="ghost" size="roundedSM" aria-label={t("message.nav.older")} disabled={!nextId} onClick={() => nextId && router.push(`${context.hrefPrefix}/${nextId}`)}>
 					<ChevronRight size={18} />
 				</Button>
 			</Tooltip>

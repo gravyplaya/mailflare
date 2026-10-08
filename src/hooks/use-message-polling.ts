@@ -88,7 +88,7 @@ export function useMessagePolling(): MessageRealtimeState {
 			dispatchMessagesChanged();
 			setNotification(event);
 			if (fromSocket) {
-				showBrowserNewMessageNotification(event);
+				void showBrowserNewMessageNotification(event);
 				channel?.postMessage({ type: "notification", payload } satisfies RealtimeChannelMessage);
 			}
 		}

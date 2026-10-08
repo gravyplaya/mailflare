@@ -57,6 +57,8 @@ export async function POST(request: Request) {
 			enableRouting: parsed.data.enableRouting,
 			enableSending: parsed.data.enableSending,
 			replaceMxRecords: parsed.data.replaceMxRecords,
+			receivingProvider: parsed.data.receivingProvider,
+			sendingProvider: parsed.data.sendingProvider,
 		});
 		return NextResponse.json(result);
 	} catch (err) {

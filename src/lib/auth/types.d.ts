@@ -17,6 +17,8 @@ export type SessionUser = {
 	keyboardShortcutsEnabled: boolean;
 	spamProtectionEnabled: boolean;
 	aiSpamProtectionEnabled: boolean;
+	gatekeeperEnabled: boolean;
+	trashRetentionDays: number | null;
 	showFullRecipientAddresses: boolean;
 	createdByUserId: string | null;
 	createdAt: Date;

@@ -1,3 +1,4 @@
+import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
 import type { ActivityLog, ActivityMetadata } from "./types";
@@ -16,9 +17,9 @@ export function formatActivityDate(value: string): string {
 	});
 }
 
-export function getActivityLabel(action: string): string {
-	if (action === "auth.login") return "Login";
-	if (action === "auth.logout") return "Logout";
+export function getActivityLabel(action: string, t: Translator = defaultTranslator): string {
+	if (action === "auth.login") return t("activity.login");
+	if (action === "auth.logout") return t("activity.logout");
 	return action;
 }
 

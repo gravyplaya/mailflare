@@ -9,6 +9,7 @@ import {
 	getProfileAvatarUrl,
 } from "@/lib/profile/avatar-client";
 import { dispatchMailboxAvatarChanged } from "@/lib/mailboxes/avatar-client";
+import { useLanguage } from "@/components/language-provider";
 import { Input } from "@/components/ui/input";
 import { ProgressiveAvatarImage } from "@/components/progressive-avatar-image";
 import type { ProfileAvatarFormProps, ProfileAvatarSessionResponse } from "./types";
@@ -23,9 +24,11 @@ import {
 export function ProfileAvatarForm({
 	mailboxId,
 	initialHasAvatar = false,
-	name = "Profile",
+	name: nameProp,
 	colorSeed,
 }: ProfileAvatarFormProps) {
+	const { t } = useLanguage();
+	const name = nameProp ?? t("avatar.profile");
 	const [hasAvatar, setHasAvatar] = useState(initialHasAvatar);
 	const [avatarUrl, setAvatarUrl] = useState(
 		mailboxId ? `/api/mailboxes/${mailboxId}/avatar` : "/api/profile/avatar",
@@ -81,7 +84,7 @@ export function ProfileAvatarForm({
 				dispatchProfileAvatarChanged(nextAvatarUrl);
 			}
 		} catch (error) {
-			setStatus(error instanceof Error ? error.message : "Upload failed");
+			setStatus(error instanceof Error ? error.message : t("avatar.uploadFailed"));
 			setBusy(false);
 		}
 	}
@@ -101,12 +104,12 @@ export function ProfileAvatarForm({
 				disabled={busy}
 				className="group relative h-24 w-24 overflow-hidden rounded-full border border-neutral-200 bg-blue-600 text-white shadow-sm outline-none ring-blue-500 transition focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-wait"
 				style={getAvatarColorStyle(colorSeed ?? mailboxId ?? name)}
-				aria-label={hasAvatar ? `Change ${name} profile picture` : `Upload ${name} profile picture`}
+				aria-label={hasAvatar ? t("avatar.change", { name }) : t("avatar.upload", { name })}
 			>
 				{hasAvatar ? (
 					<ProgressiveAvatarImage
 						src={avatarUrl}
-						alt={`${name} profile picture`}
+						alt={t("account.profilePicture", { name })}
 						className="h-full w-full object-cover"
 						onError={() => setHasAvatar(false)}
 					/>
@@ -121,7 +124,7 @@ export function ProfileAvatarForm({
 					) : (
 						<span className="flex flex-col items-center gap-1 text-[11px] font-medium">
 							<Camera className="h-5 w-5" />
-							{hasAvatar ? "Change" : "Upload"}
+							{hasAvatar ? t("avatar.changeShort") : t("avatar.uploadShort")}
 						</span>
 					)}
 				</span>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq, desc, and, or, count, isNull, isNotNull, inArray, lte, gt, notInArray, sql, sum } from "drizzle-orm";
+import { eq, desc, and, or, count, isNull, isNotNull, inArray, lte, gt, notInArray, ne, sql, sum } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/cookies";
@@ -61,6 +61,10 @@ export async function GET(request: Request) {
 	}
 	if (status) {
 		conditions.push(eq(messages.status, status));
+	}
+	// Composer templates are stored as messages but never listed.
+	if (status !== "template") {
+		conditions.push(ne(messages.status, "template"));
 	}
 	if (status === "received" && !folderId) {
 		conditions.push(isNull(messages.folderId));

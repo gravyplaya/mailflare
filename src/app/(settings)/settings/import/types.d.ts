@@ -3,6 +3,8 @@ export type ImportResult = {
 	skipped?: number;
 	errors?: string[];
 	error?: string;
+	total?: number;
+	nextOffset?: number | null;
 };
 
 export type ImapFormState = {
@@ -13,6 +15,7 @@ export type ImapFormState = {
 	password: string;
 	folder: string;
 	limit: string;
+	importAll: boolean;
 };
 
 export type ImportSourceSection = "inbox" | "sent" | "drafts" | "archived" | "spam" | "trash" | "others";

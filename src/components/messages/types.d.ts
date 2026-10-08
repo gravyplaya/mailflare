@@ -1,3 +1,4 @@
+import type { TranslationKey } from "@/lib/i18n/types";
 import type { LucideIcon } from "lucide-react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { Message, MessageFolder } from "@/hooks/types";
@@ -6,7 +7,10 @@ import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 export type MessageFolderConfig = {
 	folder: MessageFolder;
 	title: string;
+	/** Translation keys for built-in folders; custom folders show `title` as typed by the user. */
+	titleKey?: TranslationKey;
 	emptyText: string;
+	emptyTextKey?: TranslationKey;
 	hrefPrefix: string;
 	folderId?: string;
 	icon: LucideIcon;
@@ -58,9 +62,11 @@ export type BulkMessageToolbarProps = {
 	selectedCount: number;
 	hasUnreadSelection: boolean;
 	hideSelectedCount?: boolean;
-	onAction: (action: BulkMessageAction) => void;
+	onAction: (action: BulkMessageAction, folderId?: string) => void;
 	onClearSelection: () => void;
 	pending: boolean;
+	/** Folder being listed; archived, spam and trash offer a way back instead of the same move. */
+	folder?: MessageFolder;
 };
 
 export type SelectedMessage = Pick<Message, "id" | "read">;
@@ -71,6 +77,7 @@ export type MessageSelectionControl = {
 };
 
 export type BulkMessageSelectionPaneProps = {
+	folder?: MessageFolder;
 	selectedMessages: SelectedMessage[];
 	onClearSelection: () => void;
 };
@@ -86,4 +93,6 @@ export type EmailPageTitleInput = {
 	total: number;
 	unread: number;
 	emailAddress: string | null;
+	/** Set for the Inbox, which shows only the unread count. */
+	inbox?: boolean;
 };

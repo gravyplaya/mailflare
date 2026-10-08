@@ -26,6 +26,8 @@ export const users = sqliteTable("users", {
 	aiSpamProtectionEnabled: integer("ai_spam_protection_enabled", { mode: "boolean" }).notNull().default(true),
 	// Gatekeeper holds mail from senders that have not been approved yet.
 	gatekeeperEnabled: integer("gatekeeper_enabled", { mode: "boolean" }).notNull().default(false),
+	/** Days a message may stay in Trash or Spam before the scheduled purge deletes it; null keeps it forever. */
+	trashRetentionDays: integer("trash_retention_days"),
 	// Off shows the mailbox only. On shows Name <mailbox> on To, Cc, and Bcc.
 	showFullRecipientAddresses: integer("show_full_recipient_addresses", { mode: "boolean" }).notNull().default(false),
 	// TOTP second factor. The secret is written at enrolment and only counts
@@ -53,6 +55,8 @@ export const domains = sqliteTable(
 			.default("pending"),
 		routingStatus: text("routing_status"),
 		sendingSubdomainTag: text("sending_subdomain_tag"),
+		sendingProvider: text("sending_provider", { enum: ["none", "cloudflare", "resend", "ses"] }).notNull().default("none"),
+		receivingProvider: text("receiving_provider", { enum: ["none", "cloudflare", "resend", "ses"] }).notNull().default("cloudflare"),
 		sendingRequested: integer("sending_requested", { mode: "boolean" }).notNull().default(false),
 		sendingEnabled: integer("sending_enabled", { mode: "boolean" }).notNull().default(false),
 		routingEnabled: integer("routing_enabled", { mode: "boolean" }).notNull().default(false),
@@ -265,6 +269,8 @@ export const messages = sqliteTable(
 		spamSignals: text("spam_signals"),
 		spamAnalyzedAt: integer("spam_analyzed_at", { mode: "timestamp" }),
 		spamAnalysisError: text("spam_analysis_error"),
+		/** When the message last entered Trash or Spam; maintained by triggers (migration 0053). */
+		trashedAt: integer("trashed_at", { mode: "timestamp" }),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -276,6 +282,7 @@ export const messages = sqliteTable(
 		index("messages_thread_idx").on(t.mailboxId, t.threadId),
 		index("messages_provider_message_idx").on(t.mailboxId, t.providerMessageId),
 		index("messages_raw_r2_key_idx").on(t.rawR2Key),
+		index("messages_trashed_at_idx").on(t.trashedAt),
 		index("messages_inbox_page_idx").on(
 			t.mailboxId,
 			t.status,
@@ -637,6 +644,33 @@ export const sessions = sqliteTable("sessions", {
 		.$defaultFn(() => new Date()),
 });
 
+export const pushSubscriptions = sqliteTable(
+	"push_subscriptions",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		sessionId: text("session_id")
+			.notNull()
+			.references(() => sessions.id, { onDelete: "cascade" }),
+		endpoint: text("endpoint").notNull(),
+		p256dh: text("p256dh").notNull(),
+		auth: text("auth").notNull(),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updatedAt: integer("updated_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [
+		uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint),
+		index("push_subscriptions_user_idx").on(t.userId),
+		index("push_subscriptions_session_idx").on(t.sessionId),
+	],
+);
+
 /** Single-use links mailed to a user's recovery address. Only the hash is stored. */
 export const passwordResetTokens = sqliteTable(
 	"password_reset_tokens",
@@ -729,6 +763,13 @@ export const appSettings = sqliteTable("app_settings", {
 	id: text("id").primaryKey(),
 	appName: text("app_name").notNull().default("Mailflare"),
 	outboundAttachmentMaxMb: integer("outbound_attachment_max_mb").notNull().default(25),
+	resendApiKey: text("resend_api_key"),
+	/** JSON: AWS access key, secret and region (see src/lib/aws/config.ts). */
+	awsConfig: text("aws_config"),
+	/** JSON: the shared SES inbound resources Mailflare created (bucket, topic, rule set, webhook token). */
+	sesReceiving: text("ses_receiving"),
+	resendWebhookId: text("resend_webhook_id"),
+	resendWebhookSecret: text("resend_webhook_secret"),
 	iconKey: text("icon_key"),
 	agentEnabled: integer("agent_enabled", { mode: "boolean" }).notNull().default(true),
 	agentProvider: text("agent_provider", { enum: ["cloudflare", "compatible"] }),
@@ -927,6 +968,7 @@ export const schema = {
 	webhooks,
 	webhookDeliveries,
 	sessions,
+	pushSubscriptions,
 	auditLogs,
 	backupSettings,
 	backups,

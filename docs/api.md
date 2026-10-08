@@ -4,7 +4,7 @@ Mailflare exposes APIs for domain, account, and mailbox management, and for send
 
 ## Domain management
 
-Adding or removing a domain from Mailflare also updates Cloudflare Email Routing and sending resources.
+Adding or removing a domain from Mailflare also updates Cloudflare Email Routing and sending resources. Each domain has a `sendingProvider` and a `receivingProvider` (`none`, `cloudflare`, `resend` or `ses`); see [Sending and receiving providers](providers.md).
 
 | Mailflare route | Purpose |
 | --- | --- |
@@ -13,6 +13,14 @@ Adding or removing a domain from Mailflare also updates Cloudflare Email Routing
 | `GET /api/domains/[id]` | Get a connected domain |
 | `DELETE /api/domains/[id]` | Remove a domain and clean up its Cloudflare resources |
 | `GET /api/domains/[id]/dns` | View its routing and sending DNS status |
+| `PUT /api/domains/[id]/sending` | Choose the sending provider (`{ provider: "none" \| "cloudflare" \| "resend" \| "ses" }`) |
+| `PUT /api/domains/[id]/receiving` | Choose the receiving provider (same values) |
+| `GET /api/domains/[id]/sending`, `GET /api/domains/[id]/receiving` | Which providers still have configuration for the domain |
+| `DELETE /api/domains/[id]/sending`, `DELETE /api/domains/[id]/receiving` | Remove an unselected provider's configuration (`{ target }`) |
+| `GET/POST /api/domains/[id]/resend`, `/api/domains/[id]/ses` | Sending status, setup, verify and test email for Resend or SES |
+| `GET/POST /api/domains/[id]/receiving/[provider]` | Receiving checklist and setup for `resend` or `ses`; `POST` also accepts `cloudflare`, and answers `409 MX_CONFLICT` with the records until called with `{ replaceMx: true }` |
+| `GET/PUT/DELETE /api/admin/resend-key` | The shared Resend API key (primary administrator) |
+| `GET/PUT/POST/DELETE /api/admin/aws` | The shared AWS credentials: `PUT` validates before saving and `POST` re-checks permissions (primary administrator) |
 
 The hostname must be the apex of a zone available to the configured Cloudflare credentials, or a subdomain of that zone. Creating a mailbox also creates the Cloudflare Email Routing rule that delivers its address to the `mailflare` Worker.
 
@@ -23,13 +31,57 @@ The same operations are available to scripts through admin API keys with the `do
 | Mailflare route | Purpose |
 | --- | --- |
 | `GET /api/v1/domains` | List connected domains with their DNS status |
-| `POST /api/v1/domains` | Connect a domain and configure Cloudflare (`{ hostname, enableRouting?, enableSending?, replaceMxRecords? }`) |
+| `POST /api/v1/domains` | Connect a domain and configure Cloudflare (`{ hostname, enableRouting?, enableSending?, replaceMxRecords?, receivingProvider?, sendingProvider? }`; `receivingProvider` defaults to `cloudflare`, and with another value Email Routing is not enabled. `sendingProvider` defaults to `cloudflare` (or `none` when `enableSending` is `false`), and the Cloudflare sending subdomain is only created for `cloudflare`) |
 | `GET /api/v1/domains/[id]` | Get a connected domain |
 | `DELETE /api/v1/domains/[id]` | Remove a domain and clean up its Cloudflare resources |
 | `GET /api/v1/domains/[id]/dns` | View its routing, sending and authentication DNS status |
 | `POST /api/v1/domains/[id]/dns/setup` | Create a missing record (`{ record: "mx" \| "spf" \| "dkim" \| "dmarc" }`) |
 
 `GET /api/v1/domains` returns `{ domains, dns }`, where `dns[id].auth` reports `ok` / `missing` / `unknown` for MX, SPF, DKIM and DMARC. `GET /api/v1/domains/[id]/dns` returns the full audit, including the names queried and the values found. The `setup` route provisions MX/SPF through Email Routing, DKIM through the sending subdomain, and a `v=DMARC1; p=none` TXT for DMARC; on a self-hosted install where DNS is managed manually it returns an error, since Mailflare cannot write the zone.
+
+### Inbound provider endpoints
+
+Resend and Amazon SES deliver mail by calling the app, so these routes are public and authenticate themselves rather than using a session or API key:
+
+| Route | Authenticated by |
+| --- | --- |
+| `POST /api/inbound/resend` | The Svix signature of the webhook secret Resend returned when Mailflare created the webhook |
+| `POST /api/inbound/ses?token=…` | The secret token in the subscription URL, the SNS topic ARN, and reading the message from the account's own S3 bucket |
+| `POST /api/inbound` | The HMAC from the Cloudflare relay Worker, used by self-hosted installs ([self-hosting](self-hosting.md)) |
+
+## Calendar and booking
+
+### Calendar
+
+Each user has a personal calendar at **Calendar** in the dashboard. Events have a title, description, location, attendees, color, time zone and an optional repeat (`daily`, `weekly`, `monthly` or `weekdays`, with an end date and skipped occurrences). Changing or deleting a repeating event affects the whole series unless you choose a starting occurrence.
+
+When you add attendees and choose a sending mailbox, Mailflare emails each attendee an invitation with a calendar (`.ics`) file from that mailbox, and sends updates and cancellations the same way. Events created through MCP tools or the assistant record attendees but do not send invitations.
+
+| Mailflare route | Purpose |
+| --- | --- |
+| `GET /api/calendar/events?start=&end=` | List events in an ISO 8601 range (default: the next 31 days). Repeating events are returned once, with their rule |
+| `POST /api/calendar/events` | Create an event (`{ title, startsAt, endsAt, description?, location?, attendees?, color?, repeat?, repeatDays?, timeZone?, mailboxId?, from? }`) |
+| `PATCH /api/calendar/events/[eventId]` | Update an event or series. For a repeating event, pass an occurrence ID or `effectiveFrom` to change it from that occurrence onward |
+| `DELETE /api/calendar/events/[eventId]` | Delete an event, or a series from an occurrence onward |
+
+These routes accept the dashboard session or an API key (`Authorization: Bearer <key>`) with the **Read calendar** (`calendar:read`) or **Manage calendar** (`calendar:write`) scope, which you choose when creating the key in **Settings → API keys**. A key can only send invitations if it also has the `send` scope for the chosen mailbox. MCP and the assistant use separate calendar tools, described in [Email assistant and MCP](email-assistant-and-mcp.md).
+
+### Booking pages
+
+Open **Booking** to create booking events: a name, link (slug), duration, location, weekdays, one or more daily time ranges, a time zone and an on/off switch. Two disabled templates (15 and 30 minute meetings) are offered to start from. Each user gets a booking username, derived from their email and unique across the instance; an administrator can change it. Booking events are served at `/book/<username>` (the list) and `/book/<username>/<event>` (one event), with no login.
+
+A guest picks a slot, enters a name, email, optional extra guest emails and notes, and the booking is added to the host's calendar with the guest as attendee. Slots come from the host's availability: every 15 minutes inside the allowed ranges, up to 60 days ahead, at least an hour from now, and only where the host's calendar is free, repeating events included. The booking is inserted in one statement that re-checks for conflicts, so two guests cannot take the same slot. Mailflare does not email the guest a confirmation; the booking page confirms on screen.
+
+On a Team license an administrator can add other users as hosts of a booking event. The booking is created on every host's calendar, and a slot is offered only when all hosts are free.
+
+| Mailflare route | Purpose |
+| --- | --- |
+| `GET /api/booking`, `POST /api/booking` | List or create the signed-in user's booking events |
+| `PATCH /api/booking/[eventId]`, `DELETE /api/booking/[eventId]` | Update or delete one |
+| `PATCH /api/booking/settings` | Change the booking username (administrators) |
+| `GET /api/public/booking?username=` | Public: the host's name and enabled events |
+| `GET /api/public/booking/[eventId]?username=` | Public: one event and its open slots |
+| `POST /api/public/booking/[eventId]?username=` | Public: book a slot (`{ name, email, startsAt, guestEmails?, notes? }`) |
 
 ## Account and mailbox management
 
@@ -126,10 +178,14 @@ To send a reply that threads correctly in the recipient's client, pass the paren
 
 `GET /api/messages/{id}/thread` (session auth) returns every stored message in the same conversation, oldest first, excluding drafts and trash. `GET /api/messages?group=thread` collapses a list to one row per conversation (its newest message matching the filter) and adds `threadCount`, `threadUnread` and `threadMessageIds`, the ids that row stands for within the current filter, so bulk actions can act on the whole conversation.
 
+`POST /api/messages/bulk` (session auth) with `action: "delete"` permanently removes the given messages, including their raw MIME and attachment objects, but only those already in Trash or Spam; others are skipped and counted in `skipped`. `POST /api/messages/empty` with `{ mailboxId, folder: "trash" | "spam" }` permanently deletes that folder's messages in batches of 100 and returns `{ deleted, remaining }`; call it again until `remaining` is 0. Both write an `email.delete` audit entry per message with `permanent: true`.
+
+Each user can also choose **Settings > Inbox > Trash and Spam clean-up** to delete Trash and Spam automatically after a number of days (`GET`/`PATCH /api/settings/trash-retention` with `{ days: number | null }`, 1 to 365, `null` for never). It applies to messages in mailboxes the user owns. `messages.trashed_at` records when a message entered either folder; database triggers keep it current, and the scheduled maintenance run deletes expired messages in batches of 200, with `source: "retention"` in the audit entry.
+
 Messages composed in Mailflare are sent as HTML with a plain-text alternative derived from it. Quoted or forwarded content is wrapped in `<div class="mailflare-quote" data-mailflare-quote="1">` so the reader can fold it. `POST /api/drafts` accepts `forwardOfMessageId`, which copies that message's attachments onto the new draft; `DELETE /api/drafts/{id}/attachments/{attachmentId}` removes one, and `POST /api/send` with `draftId` sends the draft's stored files along with any uploaded in the request.
 
 The dashboard composer accepts up to 10 attachments. An administrator sets the outgoing per-file and combined limit from 1 to 25 MB on **General** (`/general`); the default is 25 MB. Attachment metadata is stored in D1 and file content is stored in R2. Normal message downloads require access to the mailbox containing the message.
-Cloudflare Email Sending limits the entire encoded message, including attachments, to 5 MiB for general recipients, or 25 MiB for verified destination addresses. To stay under the general limit, files over 3 MB and smaller files that would exceed the message budget are sent as R2 download links. The recipient can download them for 30 days; anyone with the link can access the file during that time. The outgoing cap still applies to those files. Cloudflare also limits recipient count to 50, subject length to 998 characters, and headers to 16 KB.
+The limits below apply to domains that send through Cloudflare. Resend and Amazon SES take attachments directly, within the same administrator limit. Cloudflare Email Sending limits the entire encoded message, including attachments, to 5 MiB for general recipients, or 25 MiB for verified destination addresses. To stay under the general limit, files over 3 MB and smaller files that would exceed the message budget are sent as R2 download links. The recipient can download them for 30 days; anyone with the link can access the file during that time. The outgoing cap still applies to those files. Cloudflare also limits recipient count to 50, subject length to 998 characters, and headers to 16 KB.
 Incoming mail that exceeds the attachment count or 25 MB decoded attachment limit is rejected during delivery, so the sender's mail provider can report a delivery failure. Cloudflare Email Routing also limits the entire raw message to 25 MiB, including MIME encoding, and may reject it before Mailflare runs.
 
 ## JMAP

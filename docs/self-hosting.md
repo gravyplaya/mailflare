@@ -21,6 +21,21 @@ Behind a reverse proxy, set `APP_URL=https://mail.example.com` so links in
 password-reset mail and the JMAP session point at the public address, and
 forward WebSocket upgrades for `/api/realtime`.
 
+### PWA and push notifications
+
+Mailflare can be installed as a PWA and can deliver new-mail notifications
+after the browser is closed. Generate one VAPID key pair for the installation:
+
+```bash
+npm run push:keys
+```
+
+Set the printed `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` values in the
+runtime environment, plus `VAPID_SUBJECT` as either a `mailto:` contact or the
+public HTTPS URL of the installation. Keep the private key secret. Browsers
+require HTTPS for service workers and Web Push (localhost is the development
+exception). Users can then enable push under **Settings → Inbox → Notifications**.
+
 ## Receiving mail
 
 Pick one; both can be on at once.
@@ -56,6 +71,15 @@ certificate on a private network.
 Sending: Edit. The domain must be a Cloudflare zone with Email Sending set
 up; Mailflare calls the REST API, no Workers plan needed.
 
+**Resend or Amazon SES, per domain.** Instead of one global relay, each domain
+can send through Resend or SES with their APIs (no SMTP involved), and receive
+through them too, once Mailflare can manage the domain's DNS with `CF_TOKEN`.
+Add the credentials on the domain page, or set `RESEND_API_KEY` /
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Receiving
+through either needs `APP_URL` set to your public HTTPS address. See
+[Sending and receiving providers](providers.md). Using SES as a plain SMTP
+relay through `SMTP_URL`, described above, still works and needs none of this.
+
 ## Cloudflare zone management (optional)
 
 If `CF_TOKEN` can also edit DNS and Email Routing on your zones, adding a
@@ -77,8 +101,13 @@ and the DNS page shows what to set by hand.
 | `SMTP_URL` | unset | Outbound relay |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | Trust self-signed relay certificates when `false` |
 | `CF_ACCOUNT_ID`, `CF_TOKEN` | unset | Cloudflare Email Sending, and zone management if the token allows |
+| `RESEND_API_KEY` | unset | Resend key, used when none is saved in the app |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | unset | Amazon SES credentials, used when none are saved in the app |
 | `INBOUND_WEBHOOK_SECRET` | unset | Enables `/api/inbound` for the relay Worker |
 | `TURNSTILE_SECRET_KEY` | unset | Bot protection on login and reset forms (`NEXT_PUBLIC_TURNSTILE_SITE_KEY` at build time) |
+| `VAPID_PUBLIC_KEY` | unset | Public Web Push application-server key |
+| `VAPID_PRIVATE_KEY` | unset | Secret Web Push application-server key |
+| `VAPID_SUBJECT` | unset | Web Push contact URI (`mailto:` or HTTPS) |
 | `AI_BASE_URL` | unset | OpenAI-compatible model API base URL for the assistant |
 | `AI_API_KEY` | unset | Server-only key for that model API |
 | `AI_MODEL` | `gpt-4o-mini` | Model ID supported by the configured API |

@@ -17,9 +17,9 @@ export function getScheduleSendOptions(now = new Date()): ScheduleSendOption[] {
 	monday.setUTCDate(monday.getUTCDate() + daysUntilMonday);
 
 	return [
-		{ label: zonedDateFields(laterToday, getUserTimeZone()).toISOString().slice(0, 10) === today.toISOString().slice(0, 10) ? "Later today" : "In 3 hours", value: laterToday },
-		{ label: "Tomorrow morning", value: atTime(tomorrow, 8) },
-		{ label: "Monday morning", value: atTime(monday, 8) },
+		{ labelKey: zonedDateFields(laterToday, getUserTimeZone()).toISOString().slice(0, 10) === today.toISOString().slice(0, 10) ? "schedule.laterToday" : "schedule.in3Hours", value: laterToday },
+		{ labelKey: "schedule.tomorrowMorning", value: atTime(tomorrow, 8) },
+		{ labelKey: "schedule.mondayMorning", value: atTime(monday, 8) },
 	];
 }
 

@@ -6,10 +6,10 @@ import { ChevronsUpDown, Paperclip } from "lucide-react";
 import { ContactAvatar } from "@/components/contacts/contact-avatar";
 import { QuotedEmailToggle } from "@/components/messages/quoted-email-toggle";
 import { runSingleMessageAction } from "@/components/message-actions/utils";
-import { sanitizeEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/email-html-sanitizer";
-import { collapseQuotedEmailHtml } from "@/app/(dashboard)/inbox/[messageId]/quote-collapse-utils";
+import { EmailHtmlRenderer } from "./email-html-renderer";
 import { getMessageBodyDisplay, resolveInlineAttachmentUrls } from "@/app/(dashboard)/inbox/[messageId]/utils";
 
+import { useLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 import type { ConversationMessageCardProps, ConversationThreadProps } from "./conversation-thread-types";
 import { ThreadMessageActions } from "./thread-message-actions";
@@ -40,17 +40,18 @@ export function ConversationThread({
 	onExpandedAllChange,
 	showFullRecipientAddresses = false,
 }: ConversationThreadProps) {
+	const { t } = useLanguage();
 	const slice = partitionThread(messages, currentMessageId, position, latestMessagesFirst);
 	if (slice.length === 0) return null;
 	const firstMessage = slice[0];
 	const lastMessage = slice.at(-1)!;
 	const middleMessages = slice.slice(1, -1);
 	const collapsed = !expandedAll && middleMessages.length > 0;
-	const collapsedLabel = `${middleMessages.length} ${position === "before" ? "older" : "newer"} message${middleMessages.length === 1 ? "" : "s"}`;
+	const collapsedLabel = t(position === "before" ? "thread.messagesCollapsed.older" : "thread.messagesCollapsed.newer", { count: middleMessages.length });
 
 	return (
 		<section
-			aria-label={position === "before" ? "Earlier messages in this conversation" : "Later messages in this conversation"}
+			aria-label={position === "before" ? t("thread.earlier") : t("thread.later")}
 			className={cn(position === (latestMessagesFirst ? "before" : "after") ? "pb-6" : "")}
 		>
 			<ol className={cn(!collapsed && "divide-y divide-neutral-200/50", latestMessagesFirst ? "border-t" : "border-b", "border-neutral-200")}>
@@ -71,8 +72,8 @@ export function ConversationThread({
 							<button
 								type="button"
 								onClick={() => onExpandedAllChange(true)}
-								aria-label={`Expand ${collapsedLabel}`}
-								title={`Expand ${collapsedLabel}`}
+								aria-label={t("thread.expand", { label: collapsedLabel })}
+								title={t("thread.expand", { label: collapsedLabel })}
 								className="inline-flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
 							>
 								<ChevronsUpDown className="h-4 w-4" />
@@ -119,6 +120,7 @@ export function ConversationMessageCard({
 	defaultExpanded = false,
 	showFullRecipientAddresses = false,
 }: ConversationMessageCardProps) {
+	const { t } = useLanguage();
 	const [locallyExpanded, setLocallyExpanded] = useState(defaultExpanded);
 	const [locallyRead, setLocallyRead] = useState(message.read);
 	const expanded = locallyExpanded;
@@ -138,9 +140,9 @@ export function ConversationMessageCard({
 	if (expanded) {
 		const display = getMessageBodyDisplay(message.textBody, message.htmlBody, message.snippet);
 		body = {
-			html: collapseQuotedEmailHtml(sanitizeEmailHtml(resolveInlineAttachmentUrls(display.htmlBody, message.id, message.attachments))),
+			html: resolveInlineAttachmentUrls(display.htmlBody, message.id, message.attachments),
 			text: display.latestContent,
-			quotedHtml: collapseQuotedEmailHtml(sanitizeEmailHtml(resolveInlineAttachmentUrls(display.quotedHtml, message.id, message.attachments)), true),
+			quotedHtml: resolveInlineAttachmentUrls(display.quotedHtml, message.id, message.attachments),
 		};
 	}
 
@@ -175,15 +177,15 @@ export function ConversationMessageCard({
 									{sender}
 									{expanded && <span className="text-xs ml-1 opacity-50 font-normal">&lt;{senderEmail}&gt;</span>}
 								</span>
-								{expanded && recipients && <span className="text-xs font-normal text-neutral-500">to {recipients}</span>}
+								{expanded && recipients && <span className="text-xs font-normal text-neutral-500">{t("thread.to", { recipients })}</span>}
 							</div>
 							{!expanded && (
-								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || "No preview"}</span>
+								<span className={clsx(!locallyRead ? "font-semibold" : "text-neutral-500", "block truncate text-[13px]")}>{message.snippet || t("thread.noPreview")}</span>
 							)}
 						</span>
 					</button>
 					<span className={clsx(!locallyRead ? "font-semibold" : "", "flex shrink-0 items-center gap-2 text-xs mr-2 mt-2")}>
-						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={`${attachments.length} attachments`} />}
+						{attachments.length > 0 && <Paperclip className="h-3.5 w-3.5" aria-label={t("thread.attachmentCount", { count: attachments.length })} />}
 						{formatUserDate(message.createdAt, { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
 					</span>
 					<ThreadMessageActions
@@ -197,7 +199,7 @@ export function ConversationMessageCard({
 				{expanded && body && (
 					<div className="pb-4 pl-16 pt-2">
 						{body.html ? (
-							<div className="email-body max-w-none text-sm text-neutral-900" dangerouslySetInnerHTML={{ __html: body.html }} />
+							<EmailHtmlRenderer html={body.html} />
 						) : (
 							<pre className="whitespace-pre-wrap font-sans text-sm text-neutral-900">{body.text}</pre>
 						)}

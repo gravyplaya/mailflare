@@ -1,4 +1,6 @@
+import type { TranslationKey } from "@/lib/i18n/types";
+
 export type AccountSettingsNavItem = {
 	segment: "" | "password" | "permissions" | "mailboxes";
-	label: string;
+	labelKey: TranslationKey;
 };

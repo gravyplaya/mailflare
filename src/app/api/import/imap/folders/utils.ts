@@ -1,7 +1,7 @@
 import type { ImapImportInput } from "@/lib/import/imap-types";
 import type { ImapFolderListRequest } from "./types";
 
-export function parseImapFolderListRequest(input: ImapFolderListRequest): Omit<ImapImportInput, "folder" | "limit"> {
+export function parseImapFolderListRequest(input: ImapFolderListRequest): Omit<ImapImportInput, "folder" | "limit" | "offset"> {
 	const host = input.host?.trim() ?? "";
 	const port = Number(input.port ?? 993);
 	const username = input.username?.trim() ?? "";

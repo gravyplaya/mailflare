@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { BadgeDollarSign, Bot, Globe2, KeyRound, Mail, Palette, Users } from "lucide-react";
+import { useLanguage } from "@/components/language-provider";
+import type { TranslationKey } from "@/lib/i18n/types";
 import { AdminUpdateCard } from "@/components/admin-update-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 type AdminSection = {
 	href: string;
-	title: string;
-	description: string;
+	titleKey: TranslationKey;
+	descriptionKey: TranslationKey;
 	icon: typeof Bot;
 	permission?: "primary" | "domains" | "users";
 };
@@ -17,48 +19,48 @@ type AdminSection = {
 const sections: AdminSection[] = [
 	{
 		href: "/agent",
-		title: "Agent",
-		description: "Choose the email assistant's AI provider and model.",
+		titleKey: "admin.nav.agent",
+		descriptionKey: "admin.section.agent",
 		icon: Bot,
 		permission: "primary",
 	},
 	{
 		href: "/mailboxes",
-		title: "Mailboxes",
-		description: "Create and manage mailbox addresses.",
+		titleKey: "admin.nav.mailboxes",
+		descriptionKey: "admin.section.mailboxes",
 		icon: Mail,
 	},
 	{
 		href: "/domains",
-		title: "Domains",
-		description: "Add Cloudflare domains and inspect DNS state.",
+		titleKey: "admin.nav.domains",
+		descriptionKey: "admin.section.domains",
 		icon: Globe2,
 		permission: "domains",
 	},
 	{
 		href: "/branding",
-		title: "Branding",
-		description: "Customize the app name, icon, and favicon.",
+		titleKey: "admin.nav.branding",
+		descriptionKey: "admin.section.branding",
 		icon: Palette,
 		permission: "primary",
 	},
 	{
 		href: "/licenses",
-		title: "Licenses",
-		description: "Compare Pro and Team one-time licenses.",
+		titleKey: "admin.nav.licenses",
+		descriptionKey: "admin.section.licenses",
 		icon: BadgeDollarSign,
 		permission: "primary",
 	},
 	{
 		href: "/accounts",
-		title: "Accounts",
-		description: "Add and manage user accounts with a Team license.",
+		titleKey: "admin.nav.accounts",
+		descriptionKey: "admin.section.accounts",
 		icon: Users,
 	},
 	{
 		href: "/api-keys",
-		title: "Admin API keys",
-		description: "Manage API access to domains, accounts, and mailboxes.",
+		titleKey: "admin.section.apiKeysTitle",
+		descriptionKey: "admin.section.apiKeys",
 		icon: KeyRound,
 		permission: "primary",
 	},
@@ -77,6 +79,7 @@ const sections: AdminSection[] = [
 ];
 
 export default function AdminSettingsPage() {
+	const { t } = useLanguage();
 	const user = useCurrentUser();
 
 	function canSee(section: AdminSection): boolean {
@@ -90,9 +93,9 @@ export default function AdminSettingsPage() {
 	return (
 		<div>
 			<div className="mb-8">
-				<h1 className="text-3xl font-medium text-neutral-900">Admin settings</h1>
+				<h1 className="text-2xl md:text-3xl font-medium text-neutral-900">{t("admin.title")}</h1>
 				<p className="mt-2 text-sm text-neutral-500">
-					Manage workspace-level mail infrastructure and integrations.
+					{t("admin.description")}
 				</p>
 			</div>
 			<div className="grid lg:grid-cols-2 gap-4">
@@ -106,10 +109,10 @@ export default function AdminSettingsPage() {
 									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
 										<Icon className="h-5 w-5" />
 									</div>
-									<CardTitle className="text-base">{section.title}</CardTitle>
+									<CardTitle className="text-base">{t(section.titleKey)}</CardTitle>
 								</CardHeader>
 								<CardContent className="pt-4">
-									<p className="text-sm text-neutral-500">{section.description}</p>
+									<p className="text-sm text-neutral-500">{t(section.descriptionKey)}</p>
 								</CardContent>
 							</Card>
 						</Link>

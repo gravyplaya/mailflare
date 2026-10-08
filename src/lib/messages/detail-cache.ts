@@ -14,6 +14,11 @@ export function getCachedMessageDetail(messageId: string): CachedMessageDetail |
 	return detailCache.get(messageId);
 }
 
+export function setCachedMessageRead(messageId: string, read: boolean): void {
+	const cached = detailCache.get(messageId);
+	if (cached?.message) detailCache.set(messageId, { ...cached, message: { ...cached.message, read } });
+}
+
 export function primeMessageDetail(message: Message): void {
 	if (message.textBody === undefined && message.htmlBody === undefined) return;
 	detailCache.set(message.id, {

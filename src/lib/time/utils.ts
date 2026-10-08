@@ -46,8 +46,14 @@ export function getRequestTimeZone(request: Request, preferredTimeZone?: string 
 	return normalizeTimeZone(preferredTimeZone ?? new URL(request.url).searchParams.get("timeZone") ?? request.headers.get("X-Time-Zone"));
 }
 
+/** The interface language the language provider keeps on `<html lang>`; the browser default when unset or on the server. */
+export function getDisplayLocale(): string | undefined {
+	if (typeof document === "undefined") return undefined;
+	return document.documentElement.lang || undefined;
+}
+
 export function formatUserDate(value: Date | string, options: Intl.DateTimeFormatOptions): string {
-	return new Intl.DateTimeFormat(undefined, { ...options, timeZone: getUserTimeZone() }).format(new Date(value));
+	return new Intl.DateTimeFormat(getDisplayLocale(), { ...options, timeZone: getUserTimeZone() }).format(new Date(value));
 }
 
 export function formatUserDateTimeLocal(value: Date): string {

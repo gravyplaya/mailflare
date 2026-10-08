@@ -1,6 +1,11 @@
+"use client";
+
+import { useLanguage } from "@/components/language-provider";
+
 export function BookingDetailSkeleton() {
-	return <div role="status" aria-label="Loading availability" className="grid overflow-hidden rounded-t-3xl bg-white shadow-xl shadow-neutral-200/50 motion-safe:animate-pulse lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(240px,.95fr)_minmax(380px,1.65fr)_minmax(240px,.95fr)]">
-		<span className="sr-only">Loading availability…</span>
+	const { t } = useLanguage();
+	return <div role="status" aria-label={t("public.loadingAvailability")} className="grid overflow-hidden rounded-t-3xl bg-white shadow-xl shadow-neutral-200/50 motion-safe:animate-pulse lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(240px,.95fr)_minmax(380px,1.65fr)_minmax(240px,.95fr)]">
+		<span className="sr-only">{t("public.loadingAvailabilityEllipsis")}</span>
 		<div className="space-y-6 border-b border-neutral-200 p-7 sm:p-9 lg:border-b-0 lg:border-r">
 			<div className="h-6 w-2/3 rounded bg-neutral-200" />
 			<div className="h-4 w-full rounded bg-neutral-100" />

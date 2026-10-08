@@ -1,4 +1,5 @@
-import type { FollowUpDueEvent, NewMessageEvent, RealtimeNotificationEvent } from "./message-realtime-types";
+import type { RealtimeNotificationEvent } from "./message-realtime-types";
+import { hasActivePushSubscription } from "@/lib/push/client";
 
 export const REALTIME_FALLBACK_INTERVAL_MS = 60_000;
 export const REALTIME_HEARTBEAT_INTERVAL_MS = 25_000;
@@ -72,7 +73,7 @@ export function parseNewMessageEvent(value: string): RealtimeNotificationEvent |
 	}
 }
 
-export function showBrowserNewMessageNotification(event: RealtimeNotificationEvent): void {
+export async function showBrowserNewMessageNotification(event: RealtimeNotificationEvent): Promise<void> {
 	if (
 		typeof Notification === "undefined" ||
 		Notification.permission !== "granted" ||
@@ -81,9 +82,10 @@ export function showBrowserNewMessageNotification(event: RealtimeNotificationEve
 	) {
 		return;
 	}
+	if (await hasActivePushSubscription().catch(() => false)) return;
 
-	try {
-		if (event.type === "follow_up_due") {
+	if (event.type === "follow_up_due") {
+		try {
 			const notification = new Notification("Follow-up due", {
 				body: `No reply yet: ${event.subject || "(no subject)"}`,
 				icon: "/icon-96.png",
@@ -94,8 +96,13 @@ export function showBrowserNewMessageNotification(event: RealtimeNotificationEve
 				window.location.assign("/follow-ups");
 				notification.close();
 			};
-			return;
+		} catch {
+			// The in-app popup still handles this follow-up.
 		}
+		return;
+	}
+
+	try {
 		const notification = new Notification(event.subject || "New email", {
 			body: `From ${event.fromName ?? event.from}`,
 			icon: "/icon-96.png",
