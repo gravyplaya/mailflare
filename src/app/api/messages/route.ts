@@ -11,7 +11,7 @@ import { getMailboxAccessLevel, listAccessibleMailboxes } from "@/lib/mailboxes/
 import { tracksAccountIdentity } from "@/lib/profile/identity-utils";
 import { buildSearchConditions } from "@/lib/search/conditions";
 import { getRequestTimeZone } from "@/lib/time/utils";
-import { getMessageListColumns, loadConversationPage } from "./utils";
+import { getMessageListColumns, getSenderKeySql, loadConversationPage } from "./utils";
 import type { ListMessage } from "./types";
 
 export async function GET(request: Request) {
@@ -35,8 +35,11 @@ export async function GET(request: Request) {
 	const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
 	const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
 	// Conversation view: one row per thread, represented by its newest message
-	// that matches the filter. Drafts are never grouped.
-	const groupByThread = url.searchParams.get("group") === "thread" && status !== "draft";
+	// that matches the filter. Sender view: one row per sender. Drafts are
+	// never grouped.
+	const group = url.searchParams.get("group");
+	const groupByThread = group === "thread" && status !== "draft";
+	const groupBySender = group === "sender" && status !== "draft";
 
 	const db = getDb(env);
 	const accessibleMailboxes = await listAccessibleMailboxes(db, user);
@@ -104,24 +107,43 @@ export async function GET(request: Request) {
 	// Which stored messages each visible row stands for, so acting on a
 	// conversation row acts on the whole conversation within this folder.
 	const threadMessageIds = new Map<string, string[]>();
-	if (groupByThread) {
-		const page = await loadConversationPage({ db, where, offset, limit });
+	// Sender bundles stand for every message from that sender in this folder.
+	const senderMembers = new Map<string, { ids: string[]; unread: number }>();
+	if (groupByThread || groupBySender) {
+		const page = await loadConversationPage({ db, where, offset, limit, group: groupBySender ? "sender" : "thread" });
 		total = page.total;
 		rows = page.ids.length
 			? await db.select(messageListColumns).from(messages).where(and(where, inArray(messages.id, page.ids)))
 			: [];
 		const rowById = new Map(rows.map((row) => [row.id, row]));
 		rows = page.ids.map((id) => rowById.get(id)).filter((row): row is ListMessage => !!row);
-		const keys = rows.map((row) => row.threadId ?? row.id);
-		if (keys.length > 0) {
-			const members = await db
-				.select({ id: messages.id, key: threadKey })
-				.from(messages)
-				.where(and(where, inArray(threadKey, keys)));
-			for (const member of members) {
-				const list = threadMessageIds.get(member.key) ?? [];
-				list.push(member.id);
-				threadMessageIds.set(member.key, list);
+		if (groupByThread) {
+			const keys = rows.map((row) => row.threadId ?? row.id);
+			if (keys.length > 0) {
+				const members = await db
+					.select({ id: messages.id, key: threadKey })
+					.from(messages)
+					.where(and(where, inArray(threadKey, keys)));
+				for (const member of members) {
+					const list = threadMessageIds.get(member.key) ?? [];
+					list.push(member.id);
+					threadMessageIds.set(member.key, list);
+				}
+			}
+		} else {
+			const keys = Array.from(new Set(rows.map((row) => normalizeEmailAddress(row.fromAddr))));
+			if (keys.length > 0) {
+				const senderKey = getSenderKeySql();
+				const members = await db
+					.select({ id: messages.id, key: senderKey, read: messages.read })
+					.from(messages)
+					.where(and(where, inArray(senderKey, keys)));
+				for (const member of members) {
+					const entry = senderMembers.get(member.key) ?? { ids: [], unread: 0 };
+					entry.ids.push(member.id);
+					if (!member.read) entry.unread += 1;
+					senderMembers.set(member.key, entry);
+				}
 			}
 		}
 	} else {
@@ -214,8 +236,18 @@ export async function GET(request: Request) {
 			...(groupByThread
 				? { threadMessageIds: threadMessageIds.get(message.threadId ?? message.id) ?? [message.id] }
 				: {}),
+			...(groupBySender
+				? (() => {
+						const members = senderMembers.get(normalizeEmailAddress(message.fromAddr));
+						return {
+							senderMessageIds: members?.ids ?? [message.id],
+							senderCount: members?.ids.length ?? 1,
+							senderUnread: members?.unread ?? 0,
+						};
+					})()
+				: {}),
 		};
 	});
 
-	return NextResponse.json({ messages: enrichedRows, total, limit, offset, grouped: groupByThread });
+	return NextResponse.json({ messages: enrichedRows, total, limit, offset, grouped: groupByThread || groupBySender });
 }

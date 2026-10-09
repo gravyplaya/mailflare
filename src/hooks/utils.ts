@@ -104,12 +104,14 @@ export function markMessagesReadInCaches(messageIds: string[], read: boolean) {
 			...response,
 			messages: response.messages.map((message) => {
 				if (!ids.has(message.id)) return message;
-				const threadSize = message.threadMessageIds?.length;
-				return {
-					...message,
-					read,
-					...(threadSize !== undefined ? { threadUnread: read ? 0 : threadSize } : {}),
-				};
+			const threadSize = message.threadMessageIds?.length;
+			const senderSize = message.senderMessageIds?.length;
+			return {
+				...message,
+				read,
+				...(threadSize !== undefined ? { threadUnread: read ? 0 : threadSize } : {}),
+				...(senderSize !== undefined ? { senderUnread: read ? 0 : senderSize } : {}),
+			};
 			}),
 		});
 	}

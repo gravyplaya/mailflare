@@ -6,6 +6,7 @@ import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
+import { normalizeEmailAddress } from "@/lib/email/address";
 import type { MessageFolder } from "@/hooks/types";
 import type { MessageNavigationEntry } from "./types";
 
@@ -24,7 +25,9 @@ export async function GET(request: Request) {
 
 	const mailboxId = params.get("mailboxId");
 	const folderId = params.get("folderId");
-	const grouped = params.get("group") === "thread";
+	const group = params.get("group");
+	const groupedByThread = group === "thread";
+	const groupedBySender = group === "sender";
 	const db = getDb(env);
 	const conditions: SQL[] = [];
 	if (mailboxId) {
@@ -64,19 +67,20 @@ export async function GET(request: Request) {
 		read: messages.read,
 		direction: messages.direction,
 		threadId: messages.threadId,
+		fromAddr: messages.fromAddr,
 	}).from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id));
 
 	const entries: MessageNavigationEntry[] = [];
-	if (grouped) {
-		const byThread = new Map<string, MessageNavigationEntry>();
+	if (groupedByThread || groupedBySender) {
+		const byKey = new Map<string, MessageNavigationEntry>();
 		for (const row of rows) {
-			const key = row.threadId ?? row.id;
+			const key = groupedBySender ? normalizeEmailAddress(row.fromAddr) : row.threadId ?? row.id;
 			const unread = row.direction === "inbound" && !row.read;
-			const existing = byThread.get(key);
+			const existing = byKey.get(key);
 			if (existing) existing.unread ||= unread;
-			else byThread.set(key, { id: row.id, unread });
+			else byKey.set(key, { id: row.id, unread });
 		}
-		entries.push(...byThread.values());
+		entries.push(...byKey.values());
 	} else {
 		entries.push(...rows.map((row) => ({ id: row.id, unread: row.direction === "inbound" && !row.read })));
 	}

@@ -11,6 +11,8 @@ export type ConversationPageInput = {
 	where: SQL | undefined;
 	offset: number;
 	limit: number;
+	/** What one row stands for: a conversation (default) or a sender. */
+	group?: "thread" | "sender";
 };
 
 export type ConversationPage = {
