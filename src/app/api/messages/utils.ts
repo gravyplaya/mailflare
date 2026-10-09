@@ -8,14 +8,24 @@ export function getMessageListColumns(): MessageListColumns {
 	) as MessageListColumns;
 }
 
-/** Select one newest matching message per thread before applying pagination. */
-export async function loadConversationPage({ db, where, offset, limit }: ConversationPageInput): Promise<ConversationPage> {
-	const threadKey = sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
+/**
+ * Lower-cased bare address of a stored From header, computed in SQL so sender
+ * bundles can partition and look up members on it. Mirrors
+ * normalizeEmailAddress for the values intake stores (`"Name" <addr>` or a
+ * bare address).
+ */
+export function getSenderKeySql() {
+	return sql<string>`case when instr(${messages.fromAddr}, '<') > 0 and instr(${messages.fromAddr}, '>') > instr(${messages.fromAddr}, '<') then lower(substr(${messages.fromAddr}, instr(${messages.fromAddr}, '<') + 1, instr(${messages.fromAddr}, '>') - instr(${messages.fromAddr}, '<') - 1)) else lower(trim(${messages.fromAddr})) end`;
+}
+
+/** Select one newest matching message per conversation or sender before applying pagination. */
+export async function loadConversationPage({ db, where, offset, limit, group = "thread" }: ConversationPageInput): Promise<ConversationPage> {
+	const groupKey = group === "sender" ? getSenderKeySql() : sql<string>`coalesce(${messages.threadId}, ${messages.id})`;
 	const ranked = db
 		.select({
 			id: messages.id,
 			createdAt: messages.createdAt,
-			position: sql<number>`row_number() over (partition by ${threadKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
+			position: sql<number>`row_number() over (partition by ${groupKey} order by ${messages.createdAt} desc, ${messages.id} desc)`.as("position"),
 		})
 		.from(messages)
 		.where(where)
@@ -23,7 +33,7 @@ export async function loadConversationPage({ db, where, offset, limit }: Convers
 
 	// Always two queries, even for deep pages or threads with many messages.
 	const [totals, heads] = await Promise.all([
-		db.select({ total: countDistinct(threadKey) }).from(messages).where(where),
+		db.select({ total: countDistinct(groupKey) }).from(messages).where(where),
 		db
 			.select({ id: ranked.id })
 			.from(ranked)

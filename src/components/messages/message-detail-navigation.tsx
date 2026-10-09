@@ -12,15 +12,18 @@ import type { MessageNavigationResponse } from "@/app/api/messages/navigation/ty
 import type { MessageDetailNavigationContextValue, MessageDetailNavigationProps, MessageDetailNavigationProviderProps, MessageDetailNavigationSnapshot, OpenedUnreadMessages } from "./message-detail-navigation-types";
 import { getMessageDetailNavigationState, takeOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
+import { useSenderGrouping } from "./use-sender-grouping";
 
 const NavigationContext = createContext<MessageDetailNavigationContextValue | null>(null);
 
 export function MessageDetailNavigationProvider({ children, config }: MessageDetailNavigationProviderProps) {
 	const { selectedMailbox, isLoading: mailboxesLoading } = useSelectedMailbox();
 	const [conversationView] = useConversationView();
+	const [senderGrouping] = useSenderGrouping();
 	const grouped = conversationView && config.folder !== "drafts";
+	const senderGrouped = senderGrouping && config.folder === "inbox";
 	const mailboxId = selectedMailbox?.id;
-	const key = `${config.folder}:${config.folderId ?? ""}:${mailboxId ?? "all"}:${grouped}`;
+	const key = `${config.folder}:${config.folderId ?? ""}:${mailboxId ?? "all"}:${senderGrouped ? "sender" : grouped ? "thread" : "none"}`;
 	const [snapshot, setSnapshot] = useState<MessageDetailNavigationSnapshot>({ key: "", entries: [] });
 	const [openedUnread, setOpenedUnread] = useState<OpenedUnreadMessages>({ key: "", ids: new Set() });
 	const recordUnread = useCallback((messageId: string) => {
@@ -42,7 +45,8 @@ export function MessageDetailNavigationProvider({ children, config }: MessageDet
 		const params = new URLSearchParams({ folder: config.folder });
 		if (config.folderId) params.set("folderId", config.folderId);
 		if (mailboxId) params.set("mailboxId", mailboxId);
-		if (grouped) params.set("group", "thread");
+		if (senderGrouped) params.set("group", "sender");
+		else if (grouped) params.set("group", "thread");
 		void authFetch(`/api/messages/navigation?${params.toString()}`)
 			.then((response) => {
 				if (!response.ok) throw new Error("Unable to load message navigation");
@@ -55,7 +59,7 @@ export function MessageDetailNavigationProvider({ children, config }: MessageDet
 				if (!cancelled) setSnapshot({ key, entries: [] });
 			});
 		return () => { cancelled = true; };
-	}, [config.folder, config.folderId, grouped, key, mailboxId, mailboxesLoading]);
+	}, [config.folder, config.folderId, grouped, senderGrouped, key, mailboxId, mailboxesLoading]);
 
 	const unreadIds = openedUnread.key === key ? openedUnread.ids : null;
 	const entries = snapshot.key === key

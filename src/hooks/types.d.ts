@@ -43,6 +43,12 @@ export type Message = {
 	threadUnread?: number;
 	/** In conversation view: every message this row stands for within the current folder. */
 	threadMessageIds?: string[];
+	/** In sender-bundled inbox: every message this row stands for within the current folder. */
+	senderMessageIds?: string[];
+	/** Messages from this sender; one means the bundle has a single message. */
+	senderCount?: number;
+	/** Unread messages from this sender; zero means the bundled sender is read. */
+	senderUnread?: number;
 	createdAt: string;
 };
 
@@ -74,8 +80,8 @@ export type MessageFilterOptions = {
 	title?: string;
 	limit?: number;
 	offset?: number;
-	/** "thread" collapses each conversation to its newest matching message. */
-	group?: "thread";
+	/** "thread" collapses each conversation to its newest matching message; "sender" one row per sender. */
+	group?: "thread" | "sender";
 };
 
 export type MessageListResponse = {

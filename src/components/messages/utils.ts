@@ -40,6 +40,7 @@ export function getMessagePartyClassName(message: Message, folder: MessageFolder
 
 /** A grouped row is read only after every message represented by it is read. */
 export function isMessageListRowUnread(message: Message): boolean {
+	if (message.senderMessageIds) return (message.senderUnread ?? 0) > 0;
 	if (message.threadMessageIds) return (message.threadUnread ?? 0) > 0;
 	return message.direction === "inbound" && !message.read;
 }

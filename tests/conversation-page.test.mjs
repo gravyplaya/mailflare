@@ -88,3 +88,40 @@ test("an offset past the end returns no heads and retains the real total", async
 	assert.equal(fixture.queryCount(), 2);
 	assert.deepEqual(page, { ids: [], total: 1 });
 });
+
+test("sender grouping selects one newest head per sender", async (t) => {
+	const fixture = createConversationFixture(SqliteDatabase, [
+		at(100, "alice-old", "t1", "mine", "received", '"Alice" <alice@example.com>'),
+		at(200, "alice-new", "t2", "mine", "received", "alice@example.com"),
+		at(300, "bob", "t3", "mine", "received", '"Bob" <bob@example.com>'),
+	]);
+	t.after(() => fixture.database.db.close());
+	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 10, group: "sender" });
+
+	assert.equal(page.total, 2);
+	assert.deepEqual(page.ids, ["bob", "alice-new"]);
+});
+
+test("sender grouping paginates by sender, not by message", async (t) => {
+	const fixture = createConversationFixture(SqliteDatabase, [
+		at(100, "alice-1", "t1", "mine", "received", "alice@example.com"),
+		at(200, "alice-2", "t2", "mine", "received", "alice@example.com"),
+		at(300, "bob", "t3", "mine", "received", "bob@example.com"),
+	]);
+	t.after(() => fixture.database.db.close());
+	const second = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 1, limit: 1, group: "sender" });
+
+	assert.deepEqual(second, { ids: ["alice-2"], total: 2 });
+});
+
+test("sender grouping still applies the folder filters", async (t) => {
+	const fixture = createConversationFixture(SqliteDatabase, [
+		at(100, "visible", "t1", "mine", "received", "shared@example.com"),
+		at(200, "other-mailbox", "t2", "theirs", "received", "shared@example.com"),
+		at(300, "archived", "t3", "mine", "archived", "shared@example.com"),
+	]);
+	t.after(() => fixture.database.db.close());
+	const page = await loadConversationPage({ db: fixture.db, where: fixture.where, offset: 0, limit: 10, group: "sender" });
+
+	assert.deepEqual(page, { ids: ["visible"], total: 1 });
+});

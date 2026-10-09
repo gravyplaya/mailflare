@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2 } from "lucide-react";
+import { Archive, ChevronLeft, ChevronRight, ListFilter, Mail, MailOpen, Trash2, Users } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +24,7 @@ import { dispatchMessageCountsDelta, toggleMessageStar } from "./message-list-ro
 import { MessageNavigationProgress, useMessageNavigation } from "./message-navigation";
 import { rememberOpenedUnreadMessage } from "./message-detail-navigation-utils";
 import { useConversationView } from "./use-conversation-view";
+import { useSenderGrouping } from "./use-sender-grouping";
 import type { MessageFolderPageProps, MessageListRowProps, RowMessageAction } from "./types";
 import {
 	formatMessageListTimestamp,
@@ -63,12 +64,19 @@ function MessageListRow({
 	const Icon = config.icon;
 	const [read, setRead] = useState(message.read);
 	const [threadUnread, setThreadUnread] = useState(message.threadUnread);
+	const [senderUnread, setSenderUnread] = useState(message.senderUnread);
 	const [starred, setStarred] = useState(message.starred);
 	useEffect(() => setRead(message.read), [message.read]);
-	useEffect(() => setThreadUnread(message.threadUnread), [message.threadUnread]);
+	useEffect(() => {
+		setThreadUnread(message.threadUnread);
+		setSenderUnread(message.senderUnread);
+	}, [message.threadUnread, message.senderUnread]);
 	useEffect(() => setStarred(message.starred), [message.starred]);
-	const rowMessage = { ...message, read, starred, threadUnread };
+	const rowMessage = { ...message, read, starred, threadUnread, senderUnread };
 	const unread = isMessageListRowUnread(rowMessage);
+	// Bundled rows carry the size of what they stand for: the sender's messages
+	// in sender view, the conversation otherwise.
+	const groupCount = message.senderMessageIds ? message.senderCount ?? 1 : message.threadCount ?? 1;
 	const draggable = config.folder === "inbox" && message.direction === "inbound";
 	const party = getMessageParty(rowMessage, config.folder, currentAccountName, t);
 	const preview = getMessagePreview(rowMessage, config.folder, t);
@@ -78,13 +86,18 @@ function MessageListRow({
 	async function runRowAction(action: RowMessageAction) {
 		const previousRead = read;
 		const previousThreadUnread = threadUnread;
+		const previousSenderUnread = senderUnread;
 		const unreadDelta = action === "read" ? -1 : action === "unread" ? 1 : 0;
 		if (action === "read") setRead(true);
 		if (action === "unread") setRead(false);
-		// Grouped rows derive their unread styling from the thread count, so it must change with the row.
+		// Grouped rows derive their unread styling from the thread or sender count, so it must change with the row.
 		if (message.threadMessageIds) {
 			if (action === "read") setThreadUnread(0);
 			if (action === "unread") setThreadUnread(message.threadMessageIds.length);
+		}
+		if (message.senderMessageIds) {
+			if (action === "read") setSenderUnread(0);
+			if (action === "unread") setSenderUnread(message.senderMessageIds.length);
 		}
 		if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: unreadDelta });
 		try {
@@ -93,6 +106,7 @@ function MessageListRow({
 			if (action === "read" || action === "unread") {
 				setRead(previousRead);
 				setThreadUnread(previousThreadUnread);
+				setSenderUnread(previousSenderUnread);
 				if (unreadDelta) dispatchMessageCountsDelta({ inboxUnreadDelta: -unreadDelta });
 			}
 			throw error;
@@ -105,12 +119,15 @@ function MessageListRow({
 		if (!read && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
 			rememberOpenedUnreadMessage(message.id);
 			const previousThreadUnread = threadUnread;
+			const previousSenderUnread = senderUnread;
 			setRead(true);
 			if (previousThreadUnread !== undefined) setThreadUnread(Math.max(0, previousThreadUnread - 1));
+			if (previousSenderUnread !== undefined) setSenderUnread(Math.max(0, previousSenderUnread - 1));
 			if (message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: -1 });
 			void runBulkMessageAction([message.id], "read", false).catch(() => {
 				setRead(false);
 				setThreadUnread(previousThreadUnread);
+				setSenderUnread(previousSenderUnread);
 				if (message.direction === "inbound") dispatchMessageCountsDelta({ inboxUnreadDelta: 1 });
 			});
 		}
@@ -144,9 +161,9 @@ function MessageListRow({
 						<span className={clsx(unread && "font-semibold",getMessagePartyClassName(rowMessage, config.folder))}>
 							{party}
 
-							{(message.threadCount ?? 1) > 1 && (
-								<span className="ml-2 text-xs font-normal text-neutral-500">{message.threadCount}</span>
-							)}
+						{groupCount > 1 && (
+							<span className="ml-2 text-xs font-normal text-neutral-500">{groupCount}</span>
+						)}
 						</span>
 						<span className={clsx(unread ?"font-medium":"text-neutral-400","shrink-0 text-[11px]")}>
 							{formatMessageListTimestamp(message.createdAt)}
@@ -213,8 +230,8 @@ function MessageListRow({
 			<span className={clsx(unread && "font-semibold", getMessagePartyClassName(rowMessage, config.folder))}>
 				{party}
 
-				{(message.threadCount ?? 1) > 1 && (
-					<span className="ml-2 text-xs text-neutral-500">{message.threadCount}</span>
+				{groupCount > 1 && (
+					<span className="ml-2 text-xs text-neutral-500">{groupCount}</span>
 				)}
 			</span>
 			<span className="truncate text-neutral-700">
@@ -297,13 +314,16 @@ export function MessageFolderPage({
 	const [emptyingFolder, setEmptyingFolder] = useState(false);
 	const [unreadOnly, setUnreadOnly] = useState(false);
 	const [conversationView] = useConversationView();
+	const [senderGrouping, setSenderGrouping] = useSenderGrouping();
 	const grouped = conversationView && config.folder !== "drafts";
+	// Sender bundling is an inbox-only alternative to conversation view.
+	const senderGrouped = senderGrouping && config.folder === "inbox";
 	const { messages, isLoading, total, limit, updateMessages } = useMessages(config.folder, selectedMailbox?.id, {
 		query,
 		limit: pageSize,
 		offset,
 		read: unreadOnly ? "unread" : "all",
-		group: grouped ? "thread" : undefined,
+		group: senderGrouped ? "sender" : grouped ? "thread" : undefined,
 	}, !mailboxesLoading, config.folderId);
 	const { counts } = useMessageCounts(selectedMailbox?.id, !mailboxesLoading);
 	usePageLoading(mailboxesLoading || isLoading);
@@ -327,15 +347,15 @@ export function MessageFolderPage({
 	const hasUnreadSelection = selectedMessages.some((message) => !message.read);
 	const allVisibleSelected = messages.length > 0 && messages.every((message) => selectedIds.includes(message.id));
 	// In conversation view a row stands for every message of its thread in this
-	// folder, so actions and drags carry all of them.
-	const rowMessageIds = (message: Message) => message.threadMessageIds ?? [message.id];
+	// folder, so actions and drags carry all of them; sender bundles likewise.
+	const rowMessageIds = (message: Message) => message.senderMessageIds ?? message.threadMessageIds ?? [message.id];
 	const expandSelectedIds = (ids: string[]) =>
 		ids.flatMap((id) => rowMessageIds(messages.find((message) => message.id === id) ?? { id } as Message));
 
 	useEffect(() => {
 		setOffset(0);
 		setSelectedMessages([]);
-	}, [query, selectedMailbox?.id, config.folder, config.folderId, unreadOnly, grouped]);
+	}, [query, selectedMailbox?.id, config.folder, config.folderId, unreadOnly, grouped, senderGrouped]);
 
 	useEffect(() => {
 		setSelectedMessages([]);
@@ -359,7 +379,7 @@ export function MessageFolderPage({
 		setSelectedMessages((current) => {
 			if (!selected) return current.filter((item) => item.id !== messageId);
 			if (current.some((item) => item.id === messageId)) return current;
-			return [...current, { id: message.id, read: message.read && !(message.threadUnread ?? 0) }];
+			return [...current, { id: message.id, read: message.read && !isMessageListRowUnread(message) }];
 		});
 	}
 
@@ -372,7 +392,7 @@ export function MessageFolderPage({
 
 			const next = new Map(current.map((message) => [message.id, message]));
 			for (const message of messages) {
-				next.set(message.id, { id: message.id, read: message.read && !(message.threadUnread ?? 0) });
+				next.set(message.id, { id: message.id, read: message.read && !isMessageListRowUnread(message) });
 			}
 			return Array.from(next.values());
 		});
@@ -512,8 +532,24 @@ export function MessageFolderPage({
 								<ChevronRight className="h-4 w-4" />
 							</Button>
 						</Tooltip>
-						{config.folder === "inbox" && (
-							<Tooltip label={unreadOnly ? t("list.showingUnread") : t("list.showUnreadOnly")}>
+					{config.folder === "inbox" && (
+						<Tooltip label={senderGrouped ? t("list.groupedBySender") : t("list.groupBySender")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								aria-label={t("list.groupBySender")}
+								aria-pressed={senderGrouped}
+								onClick={() => setSenderGrouping(!senderGrouped)}
+								className={senderGrouped ? "bg-blue-100 text-blue-700 hover:bg-blue-100" : undefined}
+							>
+								<Users className="h-4 w-4" />
+							</Button>
+						</Tooltip>
+					)}
+					{config.folder === "inbox" && (
+						<Tooltip label={unreadOnly ? t("list.showingUnread") : t("list.showUnreadOnly")}>
+
 								<Button
 									type="button"
 									variant="ghost"
