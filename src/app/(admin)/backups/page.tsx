@@ -43,6 +43,7 @@ import {
   getStatusClass,
   removeBackup,
   restoreBackup,
+  restoreBackupById,
   saveBackupSettings,
   startBackup,
 } from "./utils";
@@ -103,6 +104,10 @@ export default function BackupsPage() {
     mutationFn: restoreBackup,
     onSuccess: () => window.location.assign("/login"),
   });
+  const restoreStored = useMutation({
+    mutationFn: restoreBackupById,
+    onSuccess: () => window.location.assign("/login"),
+  });
   const error =
     backups.error ||
     saveSettings.error ||
@@ -110,7 +115,8 @@ export default function BackupsPage() {
     runBackup.error ||
     deleteBackup.error ||
     download.error ||
-    restore.error;
+    restore.error ||
+    restoreStored.error;
   const configuration = backups.data?.configuration;
   const backupConfigured = configuration?.configured === true;
 
@@ -431,6 +437,22 @@ export default function BackupsPage() {
               {formatBackupDate(backup.createdAt)}
             </span>
             <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                title={t("backups.restore")}
+                disabled={
+                  backup.status !== "completed" ||
+                  restoreStored.isPending ||
+                  restore.isPending
+                }
+                onClick={() => {
+                  if (!window.confirm(t("backups.restoreConfirm"))) return;
+                  restoreStored.mutate(backup.id);
+                }}
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"

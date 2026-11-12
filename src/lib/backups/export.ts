@@ -3,6 +3,7 @@ import type { DatabaseDialect } from "@/db/dialect";
 import type { BackupTableGroupId, DatabaseBackupDocument, DatabaseBackupTable, DatabaseRecord } from "./types";
 import { mergeLegacyMessageBodies } from "./utils";
 import { BACKUP_TABLE_GROUPS, getSelectedBackupTables } from "./table-groups";
+import { scanBackupStream } from "./restore-stream";
 
 export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_preferences", "domains", "domain_tracking_hosts", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "shared_attachment_links", "outbound_jobs", "message_tracking", "message_opens", "follow_ups", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings", "email_templates", "calendar_events", "booking_events", "auto_reply_deliveries", "spam_token_stats", "spam_reputation", "spam_feedback", "muted_threads", "mailbox_aliases", "linked_accounts", "linked_calendars", "password_reset_tokens", "mfa_recovery_codes", "login_challenges", "passkey_credentials", "mailbox_agent_settings", "agent_conversations", "agent_chat_messages", "agent_jobs", "agent_draft_metadata", "agent_send_approvals", "mcp_key_mailboxes", "ai_usage", "drive_items", "drive_upload_parts", "drive_shares"];
 /**
@@ -12,6 +13,7 @@ export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_pref
  */
 /** Added by migrations 0068 and later; databases that have not applied them yet back up and restore without them. */
 const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences"];
+const DRIVE_TABLES: DatabaseBackupTable[] = ["drive_items", "drive_upload_parts", "drive_shares"];
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
 const BACKUP_FORMAT_VERSION = 2;
@@ -185,32 +187,115 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 
 export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
 	const document = parseDatabaseBackup(content);
-	// Format 1 predates the drive group, so its writers could not have named its
-	// tables in includedTables; only format 2 documents must cover every group.
-	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) throw new Error("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
+	assertDocumentCoversGroups(document);
 	mergeLegacyMessageBodies(document);
 	fillMissingBackupTables(document);
 	validateDatabaseBackup(document);
+	const context = await prepareRestore(db, (table) => document.tables[table]?.length ?? 0);
+	await teardownDatabase(db, context.restoreTables);
+	for (const table of context.restoreTables) {
+		const rows = document.tables[table] ?? [];
+		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
+			await insertBatch(db, context.dialect, table, rows.slice(index, index + INSERT_BATCH_SIZE), context.columns.get(table) ?? null);
+		}
+	}
+}
+
+/**
+ * Restores a backup streamed from `openStream`, which must yield a fresh
+ * stream per call: the first pass validates the header and every record
+ * before the live database is touched, the second re-reads and inserts.
+ * Nothing but the current record is ever held, so a backup too large for the
+ * engine to parse whole restores the same as a small one. Format 2 only —
+ * older backups and uploaded files keep using `restoreDatabaseRecords`.
+ */
+export async function restoreDatabaseBackupStream(db: D1Database, openStream: () => Promise<ReadableStream<Uint8Array>>): Promise<void> {
+	const counts = new Map<DatabaseBackupTable, number>();
+	await scanBackupStream(await openStream(), {
+		onHeader: (header) => {
+			if (header.version !== BACKUP_FORMAT_VERSION) throw new Error("Streaming restore supports format 2 backups; restore this one by uploading the file");
+			assertDocumentCoversGroups(header);
+		},
+		onTable: (table) => {
+			if (!BACKUP_TABLES.includes(table)) throw new Error("This backup predates the streaming restore format; restore it by uploading the file");
+		},
+		onRow: (table, row) => {
+			if (!isValidBackupRow(row)) throw new Error(`Backup contains an invalid ${table} record`);
+			counts.set(table, (counts.get(table) ?? 0) + 1);
+		},
+	});
+	const context = await prepareRestore(db, (table) => counts.get(table) ?? 0);
+	await teardownDatabase(db, context.restoreTables);
+	let activeTable: DatabaseBackupTable | null = null;
+	let batch: DatabaseRecord[] = [];
+	const flushBatch = async () => {
+		if (!batch.length) return;
+		await insertBatch(db, context.dialect, activeTable as DatabaseBackupTable, batch, context.columns.get(activeTable as DatabaseBackupTable) ?? null);
+		batch = [];
+	};
+	await scanBackupStream(await openStream(), {
+		onHeader: () => {},
+		onTable: async (table) => {
+			await flushBatch();
+			activeTable = context.restoreTables.includes(table) ? table : null;
+		},
+		onRow: async (table, row) => {
+			if (activeTable !== table) return;
+			adaptRowForRestore(table, row);
+			batch.push(row);
+			if (batch.length >= INSERT_BATCH_SIZE) await flushBatch();
+		},
+	});
+	await flushBatch();
+}
+
+/** Only format 2 documents must cover every group: format 1 writers could not have known the drive group. */
+function assertDocumentCoversGroups(document: Pick<DatabaseBackupDocument, "version" | "includedTables">): void {
+	if (document.includedTables && !groupsForDocumentVersion(document.version).every((group) => group.tables.some((table) => document.includedTables?.includes(table)))) {
+		throw new Error("This backup contains selected table groups only. Restore requires a backup that includes every table group.");
+	}
+}
+
+function isValidBackupRow(row: unknown): row is DatabaseRecord {
+	return !!row && typeof row === "object" && !Array.isArray(row);
+}
+
+type RestoreContext = {
+	dialect: DatabaseDialect;
+	restoreTables: DatabaseBackupTable[];
+	columns: Map<DatabaseBackupTable, Set<string> | null>;
+};
+
+/** Checks the database can take this document and collects what the inserts need. */
+async function prepareRestore(db: D1Database, rowCount: (table: DatabaseBackupTable) => number): Promise<RestoreContext> {
 	const dialect = dialectOf(db);
 	const existing = await listTableNames(db);
-	const sharedLinksTable = existing.has("shared_attachment_links");
-	if (!sharedLinksTable && document.tables.shared_attachment_links?.length) throw new Error("Apply pending database migrations before restoring shared attachment links.");
-	const bookingTable = existing.has("booking_events");
-	if (!bookingTable && document.tables.booking_events?.length) throw new Error("Apply pending database migrations before restoring booking events.");
-	const passkeyTable = existing.has("passkey_credentials");
-	if (!passkeyTable && document.tables.passkey_credentials?.length) throw new Error("Apply pending database migrations before restoring passkeys.");
+	const needs = (table: DatabaseBackupTable, label: string) => {
+		if (!existing.has(table) && rowCount(table) > 0) throw new Error(`Apply pending database migrations before restoring ${label}.`);
+	};
+	needs("shared_attachment_links", "shared attachment links");
+	needs("booking_events", "booking events");
+	needs("passkey_credentials", "passkeys");
 	// Drive migrations ship later than the backup format, so an installation can have a database without them yet.
-	const driveTableNames = ["drive_items", "drive_upload_parts", "drive_shares"].filter((table) => existing.has(table));
-	if (["drive_items", "drive_upload_parts", "drive_shares"].some((table) => document.tables[table]?.length) && driveTableNames.length !== 3) throw new Error("Apply pending database migrations before restoring the Drive tables.");
+	const driveTableNames = DRIVE_TABLES.filter((table) => existing.has(table));
+	if (DRIVE_TABLES.some((table) => rowCount(table) > 0) && driveTableNames.length !== 3) {
+		throw new Error("Apply pending database migrations before restoring the Drive tables.");
+	}
 	const laterTableNames = LATER_MIGRATION_TABLES.filter((table) => existing.has(table));
-	const unmigrated = LATER_MIGRATION_TABLES.filter((table) => document.tables[table]?.length && !laterTableNames.includes(table));
+	const unmigrated = LATER_MIGRATION_TABLES.filter((table) => rowCount(table) > 0 && !laterTableNames.includes(table));
 	if (unmigrated.length) throw new Error(`Apply pending database migrations before restoring ${unmigrated.join(", ")}.`);
-	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || sharedLinksTable) && (table !== "booking_events" || bookingTable) && (table !== "passkey_credentials" || passkeyTable) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
-	const userColumns = await listColumnNames(db, "users");
-	const bookingColumns = bookingTable ? await listColumnNames(db, "booking_events") : null;
-	// The passkey table can predate later credential columns (aaguid); filter
-	// those out instead of failing after the restore has already torn down data.
-	const passkeyColumns = passkeyTable ? await listColumnNames(db, "passkey_credentials") : null;
+	const restoreTables = BACKUP_TABLES.filter((table) => (table !== "shared_attachment_links" || existing.has(table)) && (table !== "booking_events" || existing.has(table)) && (table !== "passkey_credentials" || existing.has(table)) && (!table.startsWith("drive_") || driveTableNames.includes(table)) && (!LATER_MIGRATION_TABLES.includes(table) || laterTableNames.includes(table)));
+	const columns = new Map<DatabaseBackupTable, Set<string> | null>([
+		["users", await listColumnNames(db, "users")],
+		["booking_events", existing.has("booking_events") ? await listColumnNames(db, "booking_events") : null],
+		// The passkey table can predate later credential columns (aaguid); filter
+		// those out instead of failing after the restore has already torn down data.
+		["passkey_credentials", existing.has("passkey_credentials") ? await listColumnNames(db, "passkey_credentials") : null],
+	]);
+	return { dialect, restoreTables, columns };
+}
+
+async function teardownDatabase(db: D1Database, restoreTables: DatabaseBackupTable[]): Promise<void> {
 	// Mark users deleted before removing them: the passkey trigger permits the
 	// cascade to remove the last credential only for an account that is being
 	// purged. Deleting users first also empties the table the restore inserts
@@ -221,21 +306,13 @@ export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffe
 		if (table === "users") continue;
 		await db.prepare(`DELETE FROM ${table}`).run();
 	}
-	for (const table of restoreTables) {
-		const rows = document.tables[table] ?? [];
-		for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-			const columns = table === "users"
-				? userColumns
-				: table === "booking_events"
-					? bookingColumns
-					: table === "passkey_credentials"
-						? passkeyColumns
-						: null;
-			const statements = rows.slice(index, index + INSERT_BATCH_SIZE).map((row) => createInsertStatement(db, dialect, table, row, columns));
-			// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
-			if (statements.length > 0) await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
-		}
-	}
+}
+
+async function insertBatch(db: D1Database, dialect: DatabaseDialect, table: DatabaseBackupTable, rows: DatabaseRecord[], columns: Set<string> | null): Promise<void> {
+	if (!rows.length) return;
+	const statements = rows.map((row) => createInsertStatement(db, dialect, table, row, columns));
+	// MySQL checks foreign keys per statement, so the batch suspends them for its own connection.
+	await db.batch(dialect === "mysql" ? [db.prepare("SET FOREIGN_KEY_CHECKS = 0"), ...statements, db.prepare("SET FOREIGN_KEY_CHECKS = 1")] : statements);
 }
 
 function parseDatabaseBackup(content: ArrayBuffer): DatabaseBackupDocument {
@@ -272,18 +349,24 @@ function fillMissingBackupTables(document: DatabaseBackupDocument): void {
 	for (const table of BACKUP_TABLES) {
 		if (!document.tables[table]) document.tables[table] = [];
 	}
-	for (const row of document.tables.booking_events ?? []) {
-		if (row.slug === undefined && typeof row.id === "string") row.slug = Array.from(new TextEncoder().encode(row.id)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	for (const row of document.tables.booking_events ?? []) adaptRowForRestore("booking_events", row);
+	for (const row of document.tables.users ?? []) adaptRowForRestore("users", row);
+}
+
+/**
+ * Per-record derivations a restore applies, wherever the record comes from:
+ * booking slugs were added after bookings existed, `require_second_factor`
+ * was added after TOTP already existed (a backup from before that column
+ * restores with the default false unless it is derived, which would silently
+ * turn MFA off for a TOTP-protected user), and the passkey triggers recount
+ * credentials as the table is restored, so the exported count must reset.
+ */
+function adaptRowForRestore(table: DatabaseBackupTable, row: DatabaseRecord): void {
+	if (table === "booking_events" && row.slug === undefined && typeof row.id === "string") {
+		row.slug = Array.from(new TextEncoder().encode(row.id)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 	}
-	// `require_second_factor` was added after TOTP already existed. A backup from
-	// before that column restores with the default false unless it is derived,
-	// which would silently turn MFA off for a TOTP-protected user.
-	for (const row of document.tables.users ?? []) {
-		if (row.require_second_factor === undefined) {
-			row.require_second_factor = Number(row.totp_enabled) === 1 ? 1 : 0;
-		}
-		// The passkey triggers recount credentials as the table is restored.
-		// Resetting avoids counting the exported value twice.
+	if (table === "users") {
+		if (row.require_second_factor === undefined) row.require_second_factor = Number(row.totp_enabled) === 1 ? 1 : 0;
 		row.passkey_count = 0;
 	}
 }

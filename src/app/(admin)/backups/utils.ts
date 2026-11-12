@@ -49,6 +49,13 @@ export async function restoreBackup(file: File): Promise<void> {
 	if (!response.ok) throw new Error(data.error ?? "Failed to restore backup");
 }
 
+/** Restores a stored backup without re-uploading it; large backups stream. */
+export async function restoreBackupById(id: string): Promise<void> {
+	const response = await authFetch(`/api/backups/${id}/restore`, { method: "POST" });
+	const data = (await response.json()) as { error?: string };
+	if (!response.ok) throw new Error(data.error ?? "Failed to restore backup");
+}
+
 export async function downloadBackup(backup: BackupItem): Promise<void> {
 	const response = await authFetch(`/api/backups/${backup.id}/download`);
 	if (!response.ok) {
