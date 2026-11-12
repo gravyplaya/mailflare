@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarX, CalendarClock, MapPin, Clock3 } from "lucide-react";
+import { CalendarCheck, CalendarX, CalendarClock, MapPin, Clock3 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";

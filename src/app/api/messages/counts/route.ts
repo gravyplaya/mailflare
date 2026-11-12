@@ -2,9 +2,10 @@ import { and, count, eq, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { followUps, messages } from "@/db/schema";
+import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/cloudflare";
+import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { buildMessageCounts } from "./utils";
 import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes/access";
 
@@ -43,8 +44,8 @@ export async function GET(request: Request) {
 			status: messages.status,
 			read: messages.read,
 			starred: messages.starred,
-			snoozedUntil: messages.snoozedUntil,
 			done: messages.done,
+			snoozedUntil: messages.snoozedUntil,
 			total: count(),
 		})
 		.from(messages)
@@ -56,14 +57,16 @@ export async function GET(request: Request) {
 			messages.status,
 			messages.read,
 			messages.starred,
-			messages.snoozedUntil,
 			messages.done,
+			messages.snoozedUntil,
 		);
 
-	const [followUpRow] = await db
+	const [scheduledRow] = await db
 		.select({ total: count() })
-		.from(followUps)
-		.where(and(eq(followUps.userId, user.id), eq(followUps.status, "triggered")));
+		.from(messages)
+		.where(and(...conditions, scheduledMessageCondition(db)));
+	const counts = buildMessageCounts(rows);
+	counts.folders.scheduled.total = scheduledRow?.total ?? 0;
 
-	return NextResponse.json({ counts: buildMessageCounts(rows), followUps: followUpRow?.total ?? 0 });
+	return NextResponse.json({ counts });
 }

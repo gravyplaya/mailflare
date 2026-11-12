@@ -3,15 +3,14 @@ import { getEnv } from "@/lib/cloudflare";
 import { requireUser } from "@/lib/auth/cookies";
 import { sendEmailSchema } from "@/lib/validators";
 import { sendEmail } from "@/lib/email/send";
-import { parseSendRequest } from "./utils";
+import { isPastSchedule, parseSendRequest } from "./utils";
 import { RequestBodyTooLargeError } from "@/lib/http/errors";
 import { getSendErrorStatus } from "./error-utils";
 import { getDb } from "@/db";
-import { agentDraftMetadata, followUps, messages } from "@/db/schema";
+import { agentDraftMetadata, messages } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { loadMessageAttachmentContents } from "@/lib/email/attachments";
 import { userOwnsDraft } from "@/app/api/drafts/utils";
-import { newId } from "@/lib/ids";
 
 export async function POST(request: Request) {
 	const env = getEnv();
@@ -23,10 +22,14 @@ export async function POST(request: Request) {
 		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
 		return NextResponse.json({ error: "Invalid send request" }, { status });
 	}
-	const { attachments = [], draftId, followUpAt: followUpAtRaw, ...fields } = input;
+	const { attachments = [], draftId, ...fields } = input;
 	const parsed = sendEmailSchema.omit({ attachments: true }).safeParse(fields);
 	if (!parsed.success) {
 		return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+	}
+
+	if (isPastSchedule(parsed.data.scheduledAt)) {
+		return NextResponse.json({ error: "Scheduled time has already passed" }, { status: 400 });
 	}
 
 	// Files already stored on the draft (a forwarded message's attachments) ride
@@ -49,18 +52,6 @@ export async function POST(request: Request) {
 			attachments,
 			publicOrigin: new URL(request.url).origin,
 		});
-
-		// Follow-up reminder: fire unless a reply lands in the thread by dueAt.
-		const followUpAt = followUpAtRaw ? new Date(followUpAtRaw) : null;
-		if (followUpAt && followUpAt.getTime() > Date.now() && parsed.data.mailboxId) {
-			await getDb(env).insert(followUps).values({
-				id: newId("fup"),
-				userId: user.id,
-				mailboxId: parsed.data.mailboxId,
-				messageId: result.messageId,
-				dueAt: followUpAt,
-			}).onConflictDoNothing();
-		}
 
 		return NextResponse.json(result);
 	} catch (err) {

@@ -1,5 +1,7 @@
 import type { BulkMessageAction } from "@/app/api/messages/bulk/types";
 import { authFetch } from "@/lib/auth/client";
+import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
+import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailAddress, normalizeEmailAddress, splitEmailAddressList } from "@/lib/email/address";
 import { getLatestEmailContent } from "@/lib/email/reply-content-utils";
@@ -24,7 +26,7 @@ import {
   ShieldIcon,
   Trash2Icon,
   TrashIcon,
-} from "lucide-react";
+} from "@/components/icons";
 
 export function getMessageBackHref(
   direction: "inbound" | "outbound",
@@ -51,8 +53,11 @@ export async function runSingleMessageAction(
     throw new Error("Unable to update message");
   }
 
-  if (action === "read" || action === "unread") markMessagesReadInCaches([messageId], action === "read");
-  window.dispatchEvent(new Event("mailflare:messages-changed"));
+  await throwIfDeleteSkipped(response, action);
+  const readChanged = action === "read" || action === "unread";
+  if (readChanged) markMessagesReadInCaches([messageId], action === "read");
+  if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds: [messageId], read: action === "read" });
+  else dispatchMessagesChanged();
 }
 
 export function openUnsubscribeUrl(url: string) {
@@ -121,22 +126,19 @@ export function getMoveMessageActions(
 
 export function getMessageActionRedirect(
   action: BulkMessageAction,
-  direction: "inbound" | "outbound",
+  listHref: string,
 ) {
-	// Toolbar actions on an open message return to the inbox, not the folder
-	// the message ended up in.
-	if (action === "trash") return "/inbox";
-	if (action === "spam") return "/inbox";
-	if (action === "archive") return "/inbox";
+	// Marking done leaves the reader for the inbox; moves return to the list
+	// the reader was opened from, not the folder the message ended up in.
 	if (action === "done") return "/inbox";
-	if (action === "inbox") return "/inbox";
+	if (action === "trash" || action === "spam" || action === "archive" || action === "inbox") return listHref;
 	return null;
 }
 
 export function buildReplySubject(subject: string | null | undefined) {
   const trimmed = (subject ?? "").trim();
   if (!trimmed) return "Re:";
-  return /^re:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
+  return /^re\s*(\[\d+\])?\s*:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`;
 }
 
 export function buildReplyQuote(
@@ -173,10 +175,11 @@ export function buildReplyQuoteHtml(
 }
 
 /**
- * Who a reply goes to. A plain reply answers the sender; reply-all also keeps
- * everyone else on the To and Cc lines, minus the mailbox's own addresses so
- * the author is not mailing themselves. Replying to a sent message re-addresses
- * its original recipients.
+ * Who a reply goes to. A plain reply answers the sender, or the Reply-To
+ * addresses when the message names any (RFC 5322 §3.6.2); reply-all also keeps
+ * everyone else on the To and Cc lines, minus the mailbox's own addresses.
+ * The original sender stays even when the message came from another own alias.
+ * Replying to a sent message re-addresses its original recipients.
  */
 export function getReplyRecipients(
   message: ReplyableMessage,
@@ -185,10 +188,10 @@ export function getReplyRecipients(
 ): ReplyRecipients {
   const own = new Set(ownAddresses.map((address) => normalizeEmailAddress(address)));
   const seen = new Set<string>();
-  const unique = (entries: string[]) =>
+  const unique = (entries: string[], excludeOwn = true) =>
     entries.filter((entry) => {
       const key = normalizeEmailAddress(entry);
-      if (!key || own.has(key) || seen.has(key)) return false;
+      if (!key || (excludeOwn && own.has(key)) || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -199,7 +202,8 @@ export function getReplyRecipients(
     return { to, cc };
   }
 
-  const to = unique([message.fromAddr]);
+  const replyTo = unique(splitEmailAddressList(message.replyTo));
+  const to = replyTo.length ? replyTo : unique([message.fromAddr], false);
   if (mode !== "replyAll") return { to, cc: [] };
   const cc = unique([...splitEmailAddressList(message.toAddr), ...splitEmailAddressList(message.ccAddr)]);
   return { to, cc };

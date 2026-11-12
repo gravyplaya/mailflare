@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, CheckCircle2, LoaderCircle, MailPlus, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, LoaderCircle, MailPlus, XCircle } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { AuthShell } from "@/components/auth/auth-shell";
@@ -35,6 +35,8 @@ export function RegisterClient() {
   const [domainChecking, setDomainChecking] = useState(false);
   const [enableSending, setEnableSending] = useState(false);
   const [setupEnableSending, setSetupEnableSending] = useState(false);
+  const [skipDns, setSkipDns] = useState(false);
+  const [setupSkipDns, setSetupSkipDns] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [checks, setChecks] = useState<SetupRequirementCheck[]>([]);
   const [databaseMigrated, setDatabaseMigrated] = useState(false);
@@ -46,6 +48,7 @@ export function RegisterClient() {
   const [mxCheckRevision, setMxCheckRevision] = useState(0);
   const [loading, setLoading] = useState(false);
   const [turnstileReset, setTurnstileReset] = useState(0);
+  const [usePasskey, setUsePasskey] = useState(false);
 
   useEffect(() => {
     void runPreparation();
@@ -55,6 +58,14 @@ export function RegisterClient() {
 
   useEffect(() => {
     if (step !== 3 || !accountDomain) return;
+    if (setupSkipDns) {
+      // DNS is skipped, so there is nothing on the zone to check.
+      setMxChecking(false);
+      setMxRecordsExist(false);
+      setReplaceMxRecords(false);
+      setError(null);
+      return;
+    }
 
     let active = true;
     setMxChecking(true);
@@ -81,7 +92,7 @@ export function RegisterClient() {
     return () => {
       active = false;
     };
-  }, [step, accountDomain, mxCheckRevision, t]);
+  }, [step, accountDomain, mxCheckRevision, setupSkipDns, t]);
 
   async function runPreparation() {
     setLoading(true);
@@ -116,6 +127,15 @@ export function RegisterClient() {
     setError(null);
 
     const hostname = String(new FormData(e.currentTarget).get("domain") ?? "").toLowerCase().trim();
+    if (skipDns) {
+      setLoading(false);
+      setSetupDomain(hostname);
+      setSetupEnableSending(true);
+      setSetupSkipDns(true);
+      setStep(3);
+      return;
+    }
+    setSetupSkipDns(false);
     const usedCachedCheck = domainCheck?.hostname === hostname;
     const result: { ok: boolean; data: DomainSetupResult } = usedCachedCheck
       ? { ok: true, data: { domain: domainCheck } }
@@ -135,7 +155,7 @@ export function RegisterClient() {
 
   async function onDomainBlur(e: React.FocusEvent<HTMLInputElement>) {
     const hostname = e.currentTarget.value.toLowerCase().trim();
-    if (hostname.length < 3 || domainCheck?.hostname === hostname) return;
+    if (skipDns || hostname.length < 3 || domainCheck?.hostname === hostname) return;
 
     setDomainChecking(true);
     setError(null);
@@ -172,6 +192,7 @@ export function RegisterClient() {
         ? setupEnableSending
         : primaryDomainSendingRequested ?? undefined,
       replaceMxRecords,
+      skipDns: setupDomain ? setupSkipDns : undefined,
     });
     setLoading(false);
     if (!ok) {
@@ -183,7 +204,9 @@ export function RegisterClient() {
         return;
       }
       setError(
-        typeof data.error === "string" ? data.error : t("setup.registrationFailed"),
+        data.code === "passkey_unavailable"
+          ? t("authError.passkeyUnavailable")
+          : typeof data.error === "string" ? data.error : t("setup.registrationFailed"),
       );
       setTurnstileReset((value) => value + 1);
       return;
@@ -274,7 +297,7 @@ export function RegisterClient() {
             )}
           </div>
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}
@@ -306,7 +329,7 @@ export function RegisterClient() {
               id="domain"
               name="domain"
               placeholder="example.com"
-              autoComplete="url"
+              autoComplete="off"
               required
               onBlur={(event) => void onDomainBlur(event)}
               onChange={(event) => {
@@ -320,6 +343,23 @@ export function RegisterClient() {
               {t("setup.zoneHint")}
             </p>
           </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3">
+            <div>
+              <Label htmlFor="setup-skip-dns">{t("setup.skipDns")}</Label>
+              <p className="mt-1 text-xs leading-5 text-neutral-500">
+                {skipDns ? t("setup.skipDnsOn") : t("setup.skipDnsHint")}
+              </p>
+            </div>
+            <Switch
+              id="setup-skip-dns"
+              checked={skipDns}
+              onCheckedChange={(checked) => {
+                setSkipDns(checked);
+                setError(null);
+              }}
+            />
+          </div>
+          {!skipDns && (
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-50 px-4 py-3">
             <div>
               <Label htmlFor="setup-enable-sending">{t("setup.enableSending")}</Label>
@@ -337,17 +377,18 @@ export function RegisterClient() {
               id="setup-enable-sending"
               checked={enableSending}
               onCheckedChange={setEnableSending}
-              disabled={domainChecking || !domainCheck}
+              disabled={domainChecking || !domainCheck || skipDns}
             />
           </div>
-          {domainCheck && (
+          )}
+          {domainCheck && !skipDns && (
             <div className="flex items-center gap-3 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">
               <CheckCircle2 className="h-4 w-4" />
               {t("setup.domainFound", { zone: domainCheck.zone.name })}
             </div>
           )}
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}
@@ -407,17 +448,31 @@ export function RegisterClient() {
               </span>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t("auth.password")}</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              minLength={8}
-              autoComplete="new-password"
-              required
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-neutral-50 px-4 py-3">
+            <Checkbox
+              name="usePasskey"
+              checked={usePasskey}
+              onChange={(event) => setUsePasskey(event.target.checked)}
+              className="mt-1"
             />
-          </div>
+            <span>
+              <span className="block text-sm font-medium text-neutral-800">{t("auth.usePasskeyInstead")}</span>
+              <span className="mt-1 block text-xs leading-5 text-neutral-500">{t("auth.usePasskeyInsteadHint")}</span>
+            </span>
+          </label>
+          {!usePasskey && (
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("auth.password")}</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                minLength={8}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="resetEmail">{t("setup.recoveryEmail")}</Label>
@@ -425,6 +480,7 @@ export function RegisterClient() {
               id="resetEmail"
               name="resetEmail"
               type="email"
+              autoComplete="email"
               placeholder="you@gmail.com"
               required
             />
@@ -432,7 +488,7 @@ export function RegisterClient() {
           </div>
 
           {error && (
-            <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <p role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </p>
           )}

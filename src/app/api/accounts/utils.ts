@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import type { getDb } from "@/db";
 import { domains, mailboxes, users } from "@/db/schema";
@@ -23,17 +23,39 @@ export function listAccountsForAdmin(db: Db) {
 			canManageMailboxes: users.canManageMailboxes,
 			canManageDomains: users.canManageDomains,
 			canManageUsers: users.canManageUsers,
+			calendarEnabled: users.calendarEnabled,
+			driveEnabled: users.driveEnabled,
 			createdAt: users.createdAt,
+			lastSignInAt: users.lastSignInAt,
+			deletedAt: users.deletedAt,
 		})
 		.from(users)
 		.orderBy(desc(users.createdAt));
 }
 
-export async function getDomainForAdmin(db: Db, adminUserId: string, domainId: string) {
+type DomainAdminActor = {
+	id: string;
+	canManageMailboxes: boolean;
+	createdByUserId: string | null;
+};
+
+/**
+ * Domains an admin may use for mailboxes and account addresses.
+ * Matches mailbox creation and the domains API: a mailbox manager created by
+ * another admin may use that creator's domains as well as their own.
+ */
+export function domainOwnerIdsForAdmin(actor: DomainAdminActor): string[] {
+	if (actor.canManageMailboxes && actor.createdByUserId) {
+		return [actor.id, actor.createdByUserId];
+	}
+	return [actor.id];
+}
+
+export async function getDomainForAdmin(db: Db, actor: DomainAdminActor, domainId: string) {
 	const [domain] = await db
 		.select()
 		.from(domains)
-		.where(and(eq(domains.id, domainId), eq(domains.userId, adminUserId)))
+		.where(and(eq(domains.id, domainId), inArray(domains.userId, domainOwnerIdsForAdmin(actor))))
 		.limit(1);
 	return domain ?? null;
 }
@@ -59,7 +81,11 @@ export function accountListItemFromUser(user: {
 	canManageMailboxes?: boolean;
 	canManageDomains?: boolean;
 	canManageUsers?: boolean;
+	calendarEnabled?: boolean;
+	driveEnabled?: boolean;
 	createdAt: Date;
+	lastSignInAt?: Date | null;
+	deletedAt?: Date | null;
 }) {
 	return {
 		id: user.id,
@@ -73,8 +99,22 @@ export function accountListItemFromUser(user: {
 		canManageMailboxes: !!user.canManageMailboxes,
 		canManageDomains: !!user.canManageDomains,
 		canManageUsers: !!user.canManageUsers,
+		calendarEnabled: user.calendarEnabled !== false,
+		driveEnabled: user.driveEnabled !== false,
 		createdAt: user.createdAt,
+		lastSignInAt: user.lastSignInAt ?? null,
+		deletedAt: user.deletedAt ?? null,
 	};
+}
+
+/** Admin session on an installation licensed for Team-only mailbox sharing. */
+export async function requireTeamSharingAdmin(request: Request) {
+	const access = await requireTeamAdmin(request);
+	if (access.error) return access;
+	if (!(await getLicenseEntitlements(access.env)).canShareMailboxes) {
+		return { ...access, error: NextResponse.json({ error: "A Team license is required to share inboxes" }, { status: 403 }) };
+	}
+	return access;
 }
 
 export async function requireTeamAdmin(request: Request) {
@@ -86,7 +126,7 @@ export async function requireTeamAdmin(request: Request) {
 			return {
 				env,
 				user,
-				error: NextResponse.json({ error: "A Team license is required to manage accounts" }, { status: 403 }),
+				error: NextResponse.json({ error: "A Pro or Team license is required to manage accounts" }, { status: 403 }),
 			};
 		}
 		return { env, user, error: null };

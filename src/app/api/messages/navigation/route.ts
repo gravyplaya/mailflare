@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { AppDatabase } from "@/db";
+import { scheduledMessageCondition } from "@/lib/email/scheduled";
 import { getDb } from "@/db";
 import { messages } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/cookies";
@@ -9,7 +11,7 @@ import { getMailboxAccessLevel, listAccessibleMailboxIds } from "@/lib/mailboxes
 import type { MessageFolder } from "@/hooks/types";
 import type { MessageNavigationEntry } from "./types";
 
-const folders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "archived", "spam", "trash"];
+const folders: MessageFolder[] = ["inbox", "starred", "snoozed", "sent", "scheduled", "archived", "spam", "trash"];
 
 export async function GET(request: Request) {
 	const env = getEnv();
@@ -25,6 +27,8 @@ export async function GET(request: Request) {
 	const mailboxId = params.get("mailboxId");
 	const folderId = params.get("folderId");
 	const grouped = params.get("group") === "thread";
+	const around = params.get("around");
+	const windowSize = Math.min(Math.max(Number(params.get("limit") ?? 250) || 250, 25), 1000);
 	const db = getDb(env);
 	const conditions: SQL[] = [];
 	if (mailboxId) {
@@ -54,17 +58,14 @@ export async function GET(request: Request) {
 	} else if (folder === "sent") {
 		conditions.push(eq(messages.direction, "outbound"));
 		conditions.push(eq(messages.status, "sent"));
+	} else if (folder === "scheduled") {
+		conditions.push(scheduledMessageCondition(db));
 	} else {
 		conditions.push(eq(messages.status, folder));
 	}
 	if (folderId) conditions.push(eq(messages.folderId, folderId));
 
-	const rows = await db.select({
-		id: messages.id,
-		read: messages.read,
-		direction: messages.direction,
-		threadId: messages.threadId,
-	}).from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt), desc(messages.id));
+	const { rows, hasNewer, hasOlder } = await loadNavigationRows(db, conditions, around, windowSize);
 
 	const entries: MessageNavigationEntry[] = [];
 	if (grouped) {
@@ -76,10 +77,89 @@ export async function GET(request: Request) {
 			if (existing) existing.unread ||= unread;
 			else byThread.set(key, { id: row.id, unread });
 		}
-		entries.push(...byThread.values());
+		// push(...spread) passes each entry as an argument and RangeErrors on
+		// large folders (~100k+ messages); append in a loop instead.
+		for (const entry of byThread.values()) entries.push(entry);
 	} else {
-		entries.push(...rows.map((row) => ({ id: row.id, unread: row.direction === "inbound" && !row.read })));
+		for (const row of rows) {
+			entries.push({ id: row.id, unread: row.direction === "inbound" && !row.read });
+		}
 	}
 
-	return NextResponse.json({ messages: entries });
+	return NextResponse.json({ messages: entries, hasNewer, hasOlder });
+}
+
+const NAV_COLUMNS = {
+	id: messages.id,
+	read: messages.read,
+	direction: messages.direction,
+	threadId: messages.threadId,
+};
+
+type NavigationRow = {
+	id: string;
+	read: boolean;
+	direction: "inbound" | "outbound";
+	threadId: string | null;
+};
+
+type NavigationRows = {
+	rows: NavigationRow[];
+	hasNewer: boolean;
+	hasOlder: boolean;
+};
+
+async function loadNavigationRows(
+	db: AppDatabase,
+	conditions: SQL[],
+	around: string | null,
+	windowSize: number,
+): Promise<NavigationRows> {
+	const base = and(...conditions);
+	const fullList = async (): Promise<NavigationRows> => ({
+		rows: await db
+			.select(NAV_COLUMNS)
+			.from(messages)
+			.where(base)
+			.orderBy(desc(messages.createdAt), desc(messages.id)),
+		hasNewer: false,
+		hasOlder: false,
+	});
+	if (!around) return fullList();
+
+	const [anchor] = await db
+		.select({ id: messages.id, createdAt: messages.createdAt })
+		.from(messages)
+		.where(and(base, eq(messages.id, around)))
+		.limit(1);
+	if (!anchor) return fullList();
+
+	const newer = or(
+		gt(messages.createdAt, anchor.createdAt),
+		and(eq(messages.createdAt, anchor.createdAt), gt(messages.id, anchor.id)),
+	)!;
+	const olderOrAnchor = or(
+		lt(messages.createdAt, anchor.createdAt),
+		and(eq(messages.createdAt, anchor.createdAt), lte(messages.id, anchor.id)),
+	)!;
+	const [newerRows, olderRows] = await Promise.all([
+		db.select(NAV_COLUMNS).from(messages)
+			.where(and(base, newer))
+			.orderBy(asc(messages.createdAt), asc(messages.id))
+			.limit(windowSize + 1),
+		db.select(NAV_COLUMNS).from(messages)
+			.where(and(base, olderOrAnchor))
+			.orderBy(desc(messages.createdAt), desc(messages.id))
+			.limit(windowSize + 2),
+	]);
+	const hasNewer = newerRows.length > windowSize;
+	const hasOlder = olderRows.length > windowSize + 1;
+	const nearerNewer = hasNewer ? newerRows.slice(0, windowSize) : newerRows;
+	const nearerOlder = hasOlder ? olderRows.slice(0, windowSize + 1) : olderRows;
+	// Newest-first: newer rows reversed, the anchor, then older rows.
+	return {
+		rows: [...nearerNewer.reverse(), ...nearerOlder],
+		hasNewer,
+		hasOlder,
+	};
 }

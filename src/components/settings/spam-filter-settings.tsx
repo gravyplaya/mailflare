@@ -83,12 +83,12 @@ export function SpamFilterSettings() {
 			</label>
 			<label className="mt-2 flex items-start gap-3 rounded-xl bg-neutral-50 p-4">
 				<span className="flex-1">
-					<span className="block text-sm font-medium text-neutral-900">AI Spam Filter</span>
-					<span className="mt-1 block text-sm text-neutral-500">Classify incoming messages with an AI model. Senders you know are never auto-filed to spam by the AI alone.</span>
+					<span className="block text-sm font-medium text-neutral-900">{t("settings.spam.aiTitle")}</span>
+					<span className="mt-1 block text-sm text-neutral-500">{t("settings.spam.aiDescription")}</span>
 				</span>
-				<Switch checked={aiEnabled} disabled={loading || !enabled} onCheckedChange={(value) => void updateAiEnabled(value)} aria-label="Enable AI spam filter" />
+				<Switch checked={aiEnabled} disabled={loading || !enabled} onCheckedChange={(value) => void updateAiEnabled(value)} aria-label={t("settings.spam.aiTitle")} />
 			</label>
-			{error && <p className="mt-2 px-4 text-sm text-red-600">{error}</p>}
+			{error && <p role="alert" className="mt-2 px-4 text-sm text-red-600">{error}</p>}
 		</div>
 	);
 }
