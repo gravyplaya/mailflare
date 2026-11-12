@@ -15,6 +15,18 @@ const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", 
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
 
+/**
+ * D1 rejects a query whose response exceeds 50 MB, so a table with enough
+ * messages (bodies included) cannot be exported in one `SELECT`. Reads page
+ * through the table by rowid instead, sizing each page by what earlier pages
+ * actually encoded to: row sizes here differ by orders of magnitude, and a
+ * limit set for the largest email would slow every other table down.
+ */
+const EXPORT_PAGE_START_ROWS = 50;
+const EXPORT_PAGE_MIN_ROWS = 25;
+const EXPORT_PAGE_MAX_ROWS = 10_000;
+const EXPORT_PAGE_TARGET_BYTES = 8 * 1024 * 1024;
+
 export function getBackupConfigurationStatus(_env?: CloudflareEnv) {
 	return { configured: true, missing: [] };
 }
@@ -82,6 +94,42 @@ export async function assertBackupTablesCoverDatabase(db: D1Database): Promise<S
 	return new Set(names);
 }
 
+/**
+ * Reads one table's rows for export. Backups hold SQLite-style values
+ * whichever database wrote them, so they restore anywhere.
+ */
+async function readTableRecords(db: D1Database, dialect: DatabaseDialect, table: string): Promise<DatabaseRecord[]> {
+	if (dialect !== "sqlite") {
+		// Only D1 caps a single response at 50 MB; external databases read in one query.
+		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
+		return result.results.map(toPortableRecord);
+	}
+	// The rowid alias drives the keyset but must not leak into the exported
+	// records, whose columns a restore replays verbatim. Deleted rows leave
+	// gaps in rowid space, which the `>` comparison steps over.
+	const rows: DatabaseRecord[] = [];
+	let afterRowId = 0;
+	let pageSize = EXPORT_PAGE_START_ROWS;
+	for (;;) {
+		const limit = pageSize;
+		const result = await db
+			.prepare(`SELECT rowid AS __export_rowid, * FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ?`)
+			.bind(afterRowId, limit)
+			.all<DatabaseRecord & { __export_rowid?: number }>();
+		const page = result.results;
+		if (!page.length) break;
+		const lastRowId = page[page.length - 1].__export_rowid;
+		if (typeof lastRowId !== "number") throw new Error(`Cannot page through ${table}: rowid is unavailable`);
+		afterRowId = lastRowId;
+		for (const { __export_rowid: _rowid, ...record } of page) rows.push(record);
+		const bytes = JSON.stringify(page).length;
+		if (bytes > EXPORT_PAGE_TARGET_BYTES) pageSize = Math.max(EXPORT_PAGE_MIN_ROWS, Math.floor((pageSize * EXPORT_PAGE_TARGET_BYTES) / bytes));
+		else if (bytes < EXPORT_PAGE_TARGET_BYTES / 4) pageSize = Math.min(EXPORT_PAGE_MAX_ROWS, pageSize * 2);
+		if (page.length < limit) break;
+	}
+	return rows;
+}
+
 export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
 	const dialect = dialectOf(db);
 	const databaseTables = await assertBackupTablesCoverDatabase(db);
@@ -94,9 +142,7 @@ export async function exportDatabaseRecords(db: D1Database, excludedGroups: Back
 			tables[table] = [];
 			continue;
 		}
-		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
-		// Backups hold SQLite-style values whichever database wrote them, so they restore anywhere.
-		tables[table] = dialect === "sqlite" ? result.results : result.results.map(toPortableRecord);
+		tables[table] = await readTableRecords(db, dialect, table);
 	}
 	const document: DatabaseBackupDocument = { format: "mailflare-database-backup", version: 2, createdAt: new Date().toISOString(), includedTables, tables };
 	return new TextEncoder().encode(JSON.stringify(document));
