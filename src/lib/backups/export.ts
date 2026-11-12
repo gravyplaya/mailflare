@@ -14,6 +14,7 @@ export const BACKUP_TABLES: DatabaseBackupTable[] = ["users", "user_compose_pref
 const LATER_MIGRATION_TABLES: DatabaseBackupTable[] = ["domain_tracking_hosts", "message_tracking", "message_opens", "follow_ups", "user_compose_preferences"];
 const REQUIRED_BACKUP_TABLES: DatabaseBackupTable[] = ["users", "domains", "mailboxes", "mailbox_access", "contacts", "folders", "api_keys", "messages", "message_attachments", "outbound_jobs", "routing_rules", "webhooks", "webhook_deliveries", "sessions", "audit_logs", "backup_settings", "backups", "app_settings", "license_settings"];
 const INSERT_BATCH_SIZE = 50;
+const BACKUP_FORMAT_VERSION = 2;
 
 /**
  * D1 rejects a query whose response exceeds 50 MB, so a table with enough
@@ -95,19 +96,20 @@ export async function assertBackupTablesCoverDatabase(db: D1Database): Promise<S
 }
 
 /**
- * Reads one table's rows for export. Backups hold SQLite-style values
- * whichever database wrote them, so they restore anywhere.
+ * Reads one table's rows for export, yielding bounded pages. Backups hold
+ * SQLite-style values whichever database wrote them, so they restore anywhere.
  */
-async function readTableRecords(db: D1Database, dialect: DatabaseDialect, table: string): Promise<DatabaseRecord[]> {
+async function* readTablePages(db: D1Database, dialect: DatabaseDialect, table: string): AsyncGenerator<DatabaseRecord[]> {
 	if (dialect !== "sqlite") {
 		// Only D1 caps a single response at 50 MB; external databases read in one query.
 		const result = await db.prepare(`SELECT * FROM ${table}`).all<DatabaseRecord>();
-		return result.results.map(toPortableRecord);
+		yield result.results.map(toPortableRecord);
+		return;
 	}
 	// The rowid alias drives the keyset but must not leak into the exported
 	// records, whose columns a restore replays verbatim. Deleted rows leave
-	// gaps in rowid space, which the `>` comparison steps over.
-	const rows: DatabaseRecord[] = [];
+	// gaps in rowid space, which the `>` comparison steps over. Pages stream
+	// out as they are read: a table of messages never sits in memory whole.
 	let afterRowId = 0;
 	let pageSize = EXPORT_PAGE_START_ROWS;
 	for (;;) {
@@ -117,35 +119,68 @@ async function readTableRecords(db: D1Database, dialect: DatabaseDialect, table:
 			.bind(afterRowId, limit)
 			.all<DatabaseRecord & { __export_rowid?: number }>();
 		const page = result.results;
-		if (!page.length) break;
+		if (!page.length) return;
 		const lastRowId = page[page.length - 1].__export_rowid;
 		if (typeof lastRowId !== "number") throw new Error(`Cannot page through ${table}: rowid is unavailable`);
 		afterRowId = lastRowId;
-		for (const { __export_rowid: _rowid, ...record } of page) rows.push(record);
+		yield page.map(({ __export_rowid: _rowid, ...record }) => record);
 		const bytes = JSON.stringify(page).length;
 		if (bytes > EXPORT_PAGE_TARGET_BYTES) pageSize = Math.max(EXPORT_PAGE_MIN_ROWS, Math.floor((pageSize * EXPORT_PAGE_TARGET_BYTES) / bytes));
 		else if (bytes < EXPORT_PAGE_TARGET_BYTES / 4) pageSize = Math.min(EXPORT_PAGE_MAX_ROWS, pageSize * 2);
-		if (page.length < limit) break;
+		if (page.length < limit) return;
 	}
-	return rows;
 }
 
-export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+export type BackupStreamWrite = (chunk: Uint8Array) => Promise<void>;
+
+/**
+ * Writes the backup document to `write` in bounded chunks, byte-identical to a
+ * `JSON.stringify` of the same document. No string ever holds more than a page
+ * of rows, so a backup can outgrow both the engine's string limit and the
+ * isolate's memory, and the writer never materializes the document whole.
+ */
+export async function streamDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = [], write: BackupStreamWrite): Promise<void> {
 	const dialect = dialectOf(db);
 	const databaseTables = await assertBackupTablesCoverDatabase(db);
 	const selected = getSelectedBackupTables(excludedGroups);
 	const includedTables = BACKUP_TABLES.filter((table) => selected.has(table));
 	if (!includedTables.length) throw new Error("Select at least one backup table group");
-	const tables: DatabaseBackupDocument["tables"] = {};
-	for (const table of includedTables) {
-		if ((table === "shared_attachment_links" || table === "booking_events" || table === "passkey_credentials" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table)) {
-			tables[table] = [];
+	const encoder = new TextEncoder();
+	const emit = (text: string) => write(encoder.encode(text));
+	await emit(`{"format":"mailflare-database-backup","version":${BACKUP_FORMAT_VERSION},"createdAt":${JSON.stringify(new Date().toISOString())},"includedTables":${JSON.stringify(includedTables)},"tables":{`);
+	for (const [index, table] of includedTables.entries()) {
+		const missing = (table === "shared_attachment_links" || table === "booking_events" || table === "passkey_credentials" || table.startsWith("drive_") || LATER_MIGRATION_TABLES.includes(table)) && !databaseTables.has(table);
+		await emit(`${index ? "," : ""}${JSON.stringify(table)}:[`);
+		if (missing) {
+			await emit("]");
 			continue;
 		}
-		tables[table] = await readTableRecords(db, dialect, table);
+		let first = true;
+		for await (const page of readTablePages(db, dialect, table)) {
+			await emit(`${first ? "" : ","}${page.map((row) => JSON.stringify(row)).join(",")}`);
+			first = false;
+		}
+		await emit("]");
 	}
-	const document: DatabaseBackupDocument = { format: "mailflare-database-backup", version: 2, createdAt: new Date().toISOString(), includedTables, tables };
-	return new TextEncoder().encode(JSON.stringify(document));
+	await emit("}}");
+}
+
+/** Collects the streamed document into one buffer. Memory-bound: the runner streams instead. */
+export async function exportDatabaseRecords(db: D1Database, excludedGroups: BackupTableGroupId[] = []): Promise<Uint8Array> {
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	await streamDatabaseRecords(db, excludedGroups, (chunk) => {
+		chunks.push(chunk);
+		total += chunk.length;
+		return Promise.resolve();
+	});
+	const document = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		document.set(chunk, offset);
+		offset += chunk.length;
+	}
+	return document;
 }
 
 export async function restoreDatabaseRecords(db: D1Database, content: ArrayBuffer): Promise<void> {
