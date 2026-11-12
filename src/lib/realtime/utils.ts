@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { domains, mailboxAccess, mailboxes } from "@/db/schema";
 import { isTeamMailboxSharingEnabled } from "@/lib/mailboxes/access-utils";
-import type { NewMessageNotification, AgentDraftNotification, FollowUpDueNotification } from "./types";
+import type { NewMessageNotification, AgentDraftNotification } from "./types";
 import { sendPushNotifications } from "@/lib/push/server";
+import { sendNativePush } from "@/lib/push/native";
 
 export function getSessionTokenFromRequest(request: Request): string | undefined {
 	const cookie = request.headers.get("Cookie");
@@ -52,11 +53,11 @@ export async function getMailboxNotificationUserIds(
 export async function notifyUsersOfNewMessage(
 	env: CloudflareEnv,
 	userIds: string[],
-	payload: NewMessageNotification | AgentDraftNotification | FollowUpDueNotification,
+	payload: NewMessageNotification | AgentDraftNotification,
 ): Promise<void> {
 	// Next dev uses a bindings-only proxy; realtime delivery runs in worker.ts.
 	if (!env.REALTIME) return;
-	await Promise.allSettled([
+	const results = await Promise.allSettled([
 		...userIds.map((userId) => {
 			const hub = env.REALTIME.getByName(userId);
 			return hub.fetch("https://mailflare-realtime/notify", {
@@ -65,7 +66,9 @@ export async function notifyUsersOfNewMessage(
 				body: JSON.stringify(payload),
 			});
 		}),
-		// Push notifications only cover new mail; follow-up reminders stay in-app.
-		...(payload.type === "agent_draft" || payload.type === "follow_up_due" ? [] : [sendPushNotifications(env, userIds, payload)]),
+		...(payload.type === "agent_draft" ? [] : [sendPushNotifications(env, userIds, payload), sendNativePush(env, userIds, payload)]),
 	]);
+	for (const result of results) {
+		if (result.status === "rejected") console.error("New-message notification failed", result.reason);
+	}
 }

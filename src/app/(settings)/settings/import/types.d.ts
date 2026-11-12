@@ -1,12 +1,3 @@
-export type ImportResult = {
-	imported?: number;
-	skipped?: number;
-	errors?: string[];
-	error?: string;
-	total?: number;
-	nextOffset?: number | null;
-};
-
 export type ImapFormState = {
 	host: string;
 	port: string;
@@ -28,7 +19,7 @@ export type ImportSourceOption = {
 	system?: boolean;
 };
 
-export type ImportTab = "file" | "imap" | "composio";
+export type ImportTab = "file" | "imap" | "composio" | "takeout";
 
 export type ComposioFormState = {
 	connectedAccountId: string;
@@ -89,6 +80,13 @@ export type ImportSourceItem = {
 	destination: string;
 	folderName?: string;
 	sourceSection?: ImportSourceSection;
+};
+
+/** Result of a one-shot import (Composio Gmail): counts for the summary line. */
+export type ImportResult = {
+	imported?: number;
+	skipped?: number;
+	error?: string;
 };
 
 export type ImportFolderSummary = {

@@ -1,5 +1,6 @@
 import type { Message } from "@/hooks/types";
 import { authFetch } from "@/lib/auth/client";
+import { dispatchMessagesChanged } from "@/lib/messages/change-events";
 import { markMessagesReadInCaches } from "@/hooks/utils";
 import { getEmailDisplayName, splitEmailAddressList } from "@/lib/email/address";
 import { formatUserDate, getUserTimeZone, zonedDateFields } from "@/lib/time/utils";
@@ -9,6 +10,7 @@ import type { MessageFolderConfig } from "./types";
 import type { PageRange } from "./types";
 import { defaultTranslator, type Translator } from "@/lib/i18n/utils";
 import type { PermanentDeleteFolder } from "@/app/api/messages/bulk/types";
+import { throwIfDeleteSkipped } from "@/lib/messages/permanent-delete-utils";
 import type { EmptyFolderResponse } from "@/app/api/messages/empty/types";
 
 export function getMessageParty(
@@ -18,7 +20,7 @@ export function getMessageParty(
 	t: Translator = defaultTranslator,
 ) {
 	if (folder === "drafts") return t("list.draft");
-	if (folder === "sent") return formatRecipientSummary(message.toAddr, message.toContactName, t);
+	if (folder === "sent" || folder === "scheduled") return formatRecipientSummary(message.toAddr, message.toContactName, t);
 	if (message.direction === "outbound" && currentAccountName) return currentAccountName;
 	return message.fromContactName ?? (message.fromAddr ? getEmailDisplayName(message.fromAddr) : t("list.unknownSender"));
 }
@@ -42,6 +44,16 @@ export function getMessagePartyClassName(message: Message, folder: MessageFolder
 export function isMessageListRowUnread(message: Message): boolean {
 	if (message.threadMessageIds) return (message.threadUnread ?? 0) > 0;
 	return message.direction === "inbound" && !message.read;
+}
+
+/** How many unread messages a read or unread action on this row would flip. */
+export function getUnreadFlipCount(message: Message, readValue: boolean): number {
+	if (message.threadMessageIds) {
+		const unread = Math.min(message.threadUnread ?? 0, message.threadMessageIds.length);
+		return readValue ? unread : message.threadMessageIds.length - unread;
+	}
+	if (message.direction !== "inbound") return 0;
+	return message.read === readValue ? 0 : 1;
 }
 
 export function getMessagePreview(message: Message, folder: MessageFolderConfig["folder"], t: Translator = defaultTranslator) {
@@ -92,8 +104,13 @@ export async function runBulkMessageAction(messageIds: string[], action: string,
 	});
 
 	if (!response.ok) throw new Error(defaultTranslator("error.updateSelected"));
-	if (action === "read" || action === "unread") markMessagesReadInCaches(messageIds, action === "read");
-	if (notify) window.dispatchEvent(new Event("mailflare:messages-changed"));
+	await throwIfDeleteSkipped(response, action);
+	const readChanged = action === "read" || action === "unread";
+	if (readChanged) markMessagesReadInCaches(messageIds, action === "read");
+	if (notify) {
+		if (readChanged) dispatchMessagesChanged({ kind: "read", messageIds, read: action === "read" });
+		else dispatchMessagesChanged();
+	}
 }
 
 /**

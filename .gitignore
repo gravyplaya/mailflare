@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/deploy/cloudflare-email-relay/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,6 +12,8 @@
 !.yarn/versions
 
 # testing
+test-results/
+playwright-report/
 /coverage
 
 # next.js

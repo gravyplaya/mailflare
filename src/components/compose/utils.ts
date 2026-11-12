@@ -26,8 +26,12 @@ export function buildSendFormData(input: {
 	/** Draft whose stored attachments should be sent with the message. */
 	draftId?: string | null;
 	scheduledAt?: Date | null;
-	/** Remind the sender if no reply lands in the thread by this time. */
-	followUpAt?: Date | null;
+	/** Hold the send briefly so it can be cancelled. */
+	undoSend?: boolean;
+	/** Add a read-receipt pixel to the sent message. */
+	trackOpens?: boolean;
+	/** Remind the sender after this many days without a reply. */
+	followUpDays?: number | null;
 	/** Embedded body images that were never uploaded to a draft; sent as inline attachments with their cid. */
 	inlineImages?: Array<{ file: File; contentId: string }>;
 }): FormData {
@@ -45,7 +49,9 @@ export function buildSendFormData(input: {
 	if (input.threading?.threadId) form.set("threadId", input.threading.threadId);
 	if (input.draftId) form.set("draftId", input.draftId);
 	if (input.scheduledAt) form.set("scheduledAt", input.scheduledAt.toISOString());
-	if (input.followUpAt) form.set("followUpAt", input.followUpAt.toISOString());
+	else if (input.undoSend) form.set("undoSend", "true");
+	if (input.trackOpens) form.set("trackOpens", "true");
+	if (input.followUpDays) form.set("followUpDays", String(input.followUpDays));
 	for (const attachment of input.attachments) {
 		form.append("attachments", attachment.file);
 	}

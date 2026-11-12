@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus2, CheckCircle2, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarPlus2, CheckCircle2, RefreshCw, Trash2, AlertTriangle } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate } from "@/lib/time/utils";
@@ -178,7 +178,7 @@ export default function SettingsCalendarsPage() {
 										</p>
 										<p className="truncate text-xs text-neutral-500">
 											{calendar.lastError
-												? <span className="inline-flex items-center gap-1 text-red-600"><TriangleAlert className="h-3.5 w-3.5" />{calendar.lastError}</span>
+												? <span className="inline-flex items-center gap-1 text-red-600"><AlertTriangle className="h-3.5 w-3.5" />{calendar.lastError}</span>
 												: calendar.lastSyncedAt
 													? `Last synced ${formatUserDate(new Date(calendar.lastSyncedAt), { dateStyle: "medium", timeStyle: "short" })}`
 													: "Not synced yet"}

@@ -68,6 +68,8 @@ test("migration adds focus triage columns and tables with the right defaults", (
 	db.exec("CREATE TABLE mailboxes (id text primary key, user_id text, domain_id text)");
 	db.exec("CREATE TABLE messages (id text primary key, user_id text, mailbox_id text, thread_id text)");
 	db.exec(readFileSync(join(root, "drizzle/migrations/0056_add_focus_triage.sql"), "utf8"));
+	// follow_ups moved to its own migration when the table became shared with upstream.
+	db.exec(readFileSync(join(root, "drizzle/migrations/0084_add_follow_ups.sql"), "utf8"));
 
 	db.exec("INSERT INTO users (id) VALUES ('u')");
 	assert.equal(db.prepare("SELECT gatekeeper_enabled AS value FROM users").get().value, 0);
@@ -79,6 +81,6 @@ test("migration adds focus triage columns and tables with the right defaults", (
 	db.exec("INSERT INTO mailboxes (id, user_id, domain_id) VALUES ('m', 'u', 'd')");
 	db.exec("INSERT INTO muted_threads (id, user_id, mailbox_id, thread_id, created_at) VALUES ('mut', 'u', 'm', 'thr', 1)");
 	assert.equal(db.prepare("SELECT auto_archive FROM muted_threads").get().auto_archive, 0);
-	db.exec("INSERT INTO follow_ups (id, user_id, mailbox_id, message_id, due_at, created_at) VALUES ('f', 'u', 'm', 'msg', 123, 1)");
+	db.exec("INSERT INTO follow_ups (id, user_id, message_id, due_at, created_at) VALUES ('f', 'u', 'msg', 123, 1)");
 	assert.equal(db.prepare("SELECT status FROM follow_ups").get().status, "pending");
 });

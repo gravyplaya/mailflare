@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlarmClock, Mail, X } from "lucide-react";
+import { BellRing, Mail, X } from "@/components/icons";
 import { getEmailDisplayName } from "@/lib/email/address";
 import { useLanguage } from "@/components/language-provider";
 import type { NewMessagePopupProps } from "./new-message-popup-types";
@@ -16,7 +16,7 @@ export function NewMessagePopup({
 		<div className="fixed right-5 top-5 z-[100] w-[min(380px,calc(100vw-40px))] rounded-xl bg-white p-4 shadow-xl">
 			<div className="flex items-start gap-3">
 				<div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${isFollowUp ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
-					{isFollowUp ? <AlarmClock className="h-5 w-5" /> : <Mail className="h-5 w-5" />}
+					{isFollowUp ? <BellRing className="h-5 w-5" /> : <Mail className="h-5 w-5" />}
 				</div>
 				<Link
 					href={isFollowUp ? "/follow-ups" : `/inbox/${notification.messageId}`}
@@ -38,7 +38,7 @@ export function NewMessagePopup({
 				<button
 					type="button"
 					onClick={onDismiss}
-					className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+					className="rounded-full p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
 				>
 					<X className="h-4 w-4" />
 					<span className="sr-only">{t("notification.dismiss")}</span>

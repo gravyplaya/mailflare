@@ -38,6 +38,11 @@ export const settingsNavSections: SettingsNavSection[] = [
 		labelKey: "settings.nav.mailbox",
 		items: [
 			{
+				href: "/settings/mailboxes",
+				labelKey: "admin.nav.mailboxes",
+				requiresMailboxAccess: true,
+			},
+			{
 				href: "/settings/import",
 				labelKey: "settings.nav.import",
 			},

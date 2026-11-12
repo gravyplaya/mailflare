@@ -16,6 +16,10 @@ export interface SendRequestPayload {
 	/** Draft whose stored attachments (e.g. forwarded files) should be sent along. */
 	draftId?: string;
 	scheduledAt?: string;
-	/** When set, remind the sender if no reply lands in the thread by this time. */
-	followUpAt?: string;
+	/** Hold the send for the undo window so it can be cancelled. */
+	undoSend?: boolean;
+	/** Add a read-receipt pixel. */
+	trackOpens?: boolean;
+	/** Remind the sender after this many days without a reply. */
+	followUpDays?: number;
 }

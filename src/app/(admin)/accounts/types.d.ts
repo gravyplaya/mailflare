@@ -32,7 +32,11 @@ export type Account = {
 	canManageMailboxes?: boolean;
 	canManageDomains?: boolean;
 	canManageUsers?: boolean;
+	calendarEnabled?: boolean;
+	driveEnabled?: boolean;
 	createdAt: string;
+	lastSignInAt?: string | null;
+	deletedAt?: string | null;
 	mailboxId?: string | null;
 	localPart?: string | null;
 	hostname?: string | null;
@@ -40,6 +44,7 @@ export type Account = {
 
 export type AccountResponse = {
 	accounts?: Account[];
+	seats?: { limit: number | null; used: number };
 	account?: Account;
 	error?: string;
 };

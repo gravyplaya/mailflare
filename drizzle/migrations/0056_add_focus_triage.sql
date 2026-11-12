@@ -12,15 +12,5 @@ CREATE TABLE `muted_threads` (
 );
 CREATE UNIQUE INDEX `muted_threads_mailbox_thread_idx` ON `muted_threads` (`mailbox_id`, `thread_id`);
 CREATE INDEX `muted_threads_user_idx` ON `muted_threads` (`user_id`);
-CREATE TABLE `follow_ups` (
-	`id` text PRIMARY KEY NOT NULL,
-	`user_id` text NOT NULL REFERENCES `users`(`id`) ON DELETE cascade,
-	`mailbox_id` text NOT NULL REFERENCES `mailboxes`(`id`) ON DELETE cascade,
-	`message_id` text NOT NULL REFERENCES `messages`(`id`) ON DELETE cascade,
-	`due_at` integer NOT NULL,
-	`status` text NOT NULL DEFAULT 'pending',
-	`triggered_at` integer,
-	`created_at` integer NOT NULL
-);
-CREATE INDEX `follow_ups_user_status_idx` ON `follow_ups` (`user_id`, `status`);
-CREATE INDEX `follow_ups_message_idx` ON `follow_ups` (`message_id`);
+-- follow_ups is created by 0084_add_follow_ups.sql, which also reshapes the
+-- table on databases that applied the earlier fork-only version of this file.

@@ -6,6 +6,10 @@ export const SPAM_WEIGHTS = {
 	reputation: { establishedSpam: 25, establishedHam: -15 },
 	content: { maximum: 30 },
 	ai: { autoFileConfidence: 0.9, suspectConfidence: 0.7, autoFile: 75, suspect: 45, relationshipCap: 45 },
+	provider: { spamVerdict: 25 },
+	blocklists: { ipListed: 30, ipDynamic: 12, domainSpam: 30, domainPhishOrMalware: 45, domainAbusedLegit: 10, urlMalware: 40 },
+	domainAge: { underWeek: 25, underMonth: 15, linkUnderWeek: 10 },
+	impersonation: { brandDisplayName: 18, addressInDisplayName: 12, lookalikeDomain: 30 },
 } as const;
 
 export const AI_SPAM_TIMEOUT_MS = 4_000;

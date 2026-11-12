@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 		...(folderId !== undefined ? { folderId } : {}),
 		// "done" marks the message completed; moving back to the inbox clears it.
 		...(payload.action === "done" ? { done: true } : {}),
-		...(payload.action === "inbox" ? { done: false } : {}),
+		...(payload.action === "inbox" ? { done: false, snoozedUntil: null } : {}),
 	};
 
 	if (payload.action !== "delete" && Object.keys(values).length === 0) {

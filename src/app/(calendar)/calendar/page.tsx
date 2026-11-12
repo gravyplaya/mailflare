@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, MoreVertical, Palette, Plus, Repeat2, Trash2, UsersRound, X } from "lucide-react";
+import { AlignLeft, CalendarPlus2, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, MapPin, MoreVertical, Palette, Bell, Plus, Repeat2, Trash2, UsersRound, X } from "@/components/icons";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { mobilePrimaryActionClass } from "@/components/page-header-utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { RouteLoadingBarPortal } from "@/components/route-loading-bar-portal";
 import { authFetch } from "@/lib/auth/client";
 import { formatUserDate, getUserTimeZone, parseUserDateTimeLocal } from "@/lib/time/utils";
 import { normalizeCalendarColor } from "@/lib/calendar/colors";
+import { REMINDER_MINUTE_OPTIONS } from "@/lib/calendar/reminder-utils";
 import { DEFAULT_REPEAT_DAYS, parseCalendarRepeatDays } from "@/lib/calendar/recurrence";
 import { DEFAULT_FOLDER_COLOR, FOLDER_COLOR_OPTIONS } from "@/lib/folders/colors";
 import type { TranslationKey } from "@/lib/i18n/types";
@@ -42,6 +43,7 @@ import {
   monthGridDates, PAST_EVENT_COLOR_CLASSES, rescheduleCalendarOccurrence, resizeEventTimes, startOfDay, startOfMonth, startOfWeek, WEEKDAY_OPTIONS,
 } from "./utils";
 import clsx from "clsx";
+import { DialogFrame } from "@/components/dialog-frame";
 
 const eventFieldClass = "h-9 border-transparent bg-transparent px-2 shadow-none hover:bg-white/60 focus:border-blue-600 focus:bg-white focus:shadow-sm";
 
@@ -69,6 +71,7 @@ export default function CalendarPage() {
   const [color, setColor] = useState<string>(DEFAULT_FOLDER_COLOR);
   const [repeat, setRepeat] = useState<CalendarRepeat>("none");
   const [repeatDays, setRepeatDays] = useState<number[]>(DEFAULT_REPEAT_DAYS);
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [durationOptionsOpen, setDurationOptionsOpen] = useState(false);
@@ -154,7 +157,7 @@ export default function CalendarPage() {
     void authFetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
       .then((response) => {
         if (!response.ok) throw new Error(t("calendar.loadFailed"));
-        return response.json();
+        return response.json() as Promise<{ events?: Parameters<typeof expandCalendarEvents>[0] }>;
       })
       .then((data) => { if (active) setEvents(expandCalendarEvents(data.events ?? [], start, end)); })
       .catch(() => { if (active) toast.error(t("calendar.loadFailed")); })
@@ -180,6 +183,7 @@ export default function CalendarPage() {
     setColor(DEFAULT_FOLDER_COLOR);
     setRepeat("none");
     setRepeatDays(DEFAULT_REPEAT_DAYS);
+    setReminderMinutes(null);
     setGuests("");
     setLocation("");
     setDescription("");
@@ -213,7 +217,7 @@ export default function CalendarPage() {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
+          title, startsAt: savedStart.toISOString(), endsAt: savedEnd.toISOString(), color, repeat, repeatDays, repeatAnchorDay, reminderMinutes, effectiveFrom: effectiveFrom?.toISOString(), moveOccurrenceToPast: movingToPast, attendees: guests.split(","),
           timeZone: getUserTimeZone(),
           description,
           location,
@@ -227,7 +231,7 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = await response.json();
+        const result = (await response.json()) as { error?: string };
         toast.error(result.error ?? t("calendar.saveFailed"));
       }
     } catch {
@@ -248,7 +252,7 @@ export default function CalendarPage() {
         setEventsVersion((version) => version + 1);
         setClosingEventEditor(true);
       } else {
-        const result = await response.json();
+        const result = (await response.json()) as { error?: string };
         toast.error(result.error ?? t("calendar.deleteFailed"));
       }
     } catch {
@@ -263,6 +267,7 @@ export default function CalendarPage() {
     setTitle(event.title);
     setColor(normalizeCalendarColor(event.color));
     setRepeat(event.repeat);
+    setReminderMinutes(event.reminderMinutes ?? null);
     setRepeatDays(event.repeat === "weekdays" ? parseCalendarRepeatDays(event.repeatDays) : DEFAULT_REPEAT_DAYS);
     setLocation(event.location ?? "");
     setDescription(event.description ?? "");
@@ -409,7 +414,8 @@ export default function CalendarPage() {
 
   return (
     <div className={clsx("flex h-full min-h-0 flex-col bg-[#f6f8fc] pl-3 max-md:pl-0 lg:flex-row transition-[gap] duration-200 ease-in-out motion-reduce:transition-none", minimal ? "gap-0" : "gap-3")}>
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-left" />
+      <h1 className="sr-only">{t("account.calendar")}</h1>
       {loading && <RouteLoadingBarPortal />}
       {headerTarget && createPortal(
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 ">
@@ -451,7 +457,7 @@ export default function CalendarPage() {
                       <button key={dateKey(day)} type="button" aria-label={formatUserDate(day, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} aria-pressed={selected}
                         onClick={() => { setVisibleDate(day); setMonthPickerOpen(false); }}
                         className={clsx("mx-auto my-0.5 flex h-11 w-11 items-center justify-center rounded-full text-base font-medium hover:bg-neutral-200/80",
-                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-400" : "text-neutral-900")}>
+                          selected ? "bg-blue-600 text-white hover:bg-blue-600" : isToday ? "bg-neutral-200 text-neutral-900" : outsideMonth ? "text-neutral-500" : "text-neutral-900")}>
                         {formatUserDate(day, { day: "numeric" })}
                       </button>
                     );
@@ -556,8 +562,8 @@ export default function CalendarPage() {
       </section>
 
       {adding && (
-        <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/35 p-4", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
-          <div role="dialog" aria-modal="true" aria-label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
+        <div className={clsx("dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 dark:bg-black/55", closingEventEditor && "pointer-events-none")} data-state={closingEventEditor ? "closed" : "open"}>
+          <DialogFrame label={editing ? t("calendar.editEvent") : t("calendar.createEvent")} onClose={() => { if (pendingAction !== "save") setClosingEventEditor(true); }} className="dialog-content max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6" data-state={closingEventEditor ? "closed" : "open"}
             onAnimationEnd={(event) => {
               if (!closingEventEditor || event.target !== event.currentTarget) return;
               setAdding(false);
@@ -593,6 +599,19 @@ export default function CalendarPage() {
                       </Button>
                     ))}
                   </div>}
+                </div>
+              </div>
+              <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                <Bell aria-hidden="true" className="mt-2 h-5 w-5 text-neutral-600" />
+                <div className="relative min-w-0">
+                  <select value={reminderMinutes ?? ""} onChange={(event) => setReminderMinutes(event.target.value === "" ? null : Number(event.target.value))} aria-label={t("calendar.reminder")}
+                    className="h-9 w-full appearance-none rounded-md border border-transparent bg-transparent pl-2 pr-8 text-sm text-neutral-700 outline-none hover:bg-neutral-50 focus:border-blue-600 focus:bg-white">
+                    <option value="">{t("calendar.reminder.none")}</option>
+                    {REMINDER_MINUTE_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>{t(`calendar.reminder.m${minutes}` as TranslationKey)}</option>
+                    ))}
+                  </select>
+                  <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
                 </div>
               </div>
               <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
@@ -671,7 +690,7 @@ export default function CalendarPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </DialogFrame>
         </div>
       )}
     </div>
