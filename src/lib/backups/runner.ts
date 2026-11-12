@@ -9,39 +9,40 @@ import { BACKUP_PREFIX, createBackupFilename } from "./utils";
 const BACKUP_PART_BYTES = 8 * 1024 * 1024;
 
 /**
- * Collects streamed chunks into multipart-upload parts. Chunks arrive far
- * smaller than a part (a page of rows at a time), so they accumulate until the
- * part size is met and are then joined and handed to the upload.
+ * Collects streamed chunks into fixed-size multipart-upload parts. Chunks
+ * arrive far smaller than a part (a page of rows at a time), so they fill the
+ * buffer until a part is complete. R2 requires every non-trailing part of an
+ * upload to share one length (S3 and B2 are content), so each part is sliced
+ * to exactly `partBytes` and only the trailing part may be short.
  */
 export class BackupPartBuffer {
-	private chunks: Uint8Array[] = [];
-	private length = 0;
+	private readonly buffer: Uint8Array;
+	private filled = 0;
 
-	constructor(private readonly partBytes = BACKUP_PART_BYTES) {}
+	constructor(private readonly partBytes = BACKUP_PART_BYTES) {
+		this.buffer = new Uint8Array(partBytes);
+	}
 
-	/** Buffers the chunk and uploads a part once the buffer holds enough. */
+	/** Copies the chunk into the buffer, uploading a part each time one fills. */
 	async push(chunk: Uint8Array, upload: (part: Uint8Array) => Promise<void>): Promise<void> {
-		this.chunks.push(chunk);
-		this.length += chunk.length;
-		if (this.length < this.partBytes) return;
-		await upload(this.concat());
-	}
-
-	/** The buffered remainder; empty when the stream ended exactly on a part boundary. */
-	flush(): Uint8Array {
-		return this.concat();
-	}
-
-	private concat(): Uint8Array {
-		const part = new Uint8Array(this.length);
 		let offset = 0;
-		for (const chunk of this.chunks) {
-			part.set(chunk, offset);
-			offset += chunk.length;
+		while (offset < chunk.length) {
+			const take = Math.min(this.partBytes - this.filled, chunk.length - offset);
+			this.buffer.set(chunk.subarray(offset, offset + take), this.filled);
+			this.filled += take;
+			offset += take;
+			if (this.filled === this.partBytes) {
+				// Each upload is awaited before more bytes are copied, so handing
+				// over the reused buffer is safe.
+				await upload(this.buffer);
+				this.filled = 0;
+			}
 		}
-		this.chunks = [];
-		this.length = 0;
-		return part;
+	}
+
+	/** The trailing part: the one part allowed to be short, possibly empty. */
+	flush(): Uint8Array {
+		return this.buffer.subarray(0, this.filled);
 	}
 }
 

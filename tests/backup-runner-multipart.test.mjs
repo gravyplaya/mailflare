@@ -82,7 +82,9 @@ function fakeBucket() {
 			state.options = options;
 			return {
 				uploadPart: async (partNumber, value) => {
-					const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+					// A real bucket copies the bytes into its request; the buffer
+					// reuses its memory, so the fake must snapshot too.
+					const bytes = new Uint8Array(value instanceof Uint8Array ? value : new Uint8Array(value));
 					state.parts.push({ partNumber, bytes });
 					return { partNumber, etag: `etag-${partNumber}` };
 				},
@@ -137,17 +139,31 @@ test("a failing export aborts the multipart upload and marks the backup failed",
 	assert.match(record.error, /query exploded/);
 });
 
-test("the part buffer uploads exactly when a part is full and flushes the remainder", async () => {
+test("the part buffer slices exact-size parts and flushes the short trailing part", async () => {
 	const uploaded = [];
+	const upload = (part) => uploaded.push(new Uint8Array(part));
 	const buffer = new BackupPartBuffer(10);
-	await buffer.push(new Uint8Array([1, 2, 3, 4]), (part) => uploaded.push(part));
-	await buffer.push(new Uint8Array([5, 6, 7]), (part) => uploaded.push(part));
+	await buffer.push(new Uint8Array([1, 2, 3, 4]), upload);
+	await buffer.push(new Uint8Array([5, 6, 7]), upload);
 	assert.deepEqual(uploaded, [], "nothing uploads below the part size");
-	await buffer.push(new Uint8Array([8, 9, 10, 11, 12]), (part) => uploaded.push(part));
-	assert.deepEqual(uploaded, [new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])]);
-	assert.deepEqual([...buffer.flush()], [], "an exact boundary leaves nothing to flush");
+	await buffer.push(new Uint8Array([8, 9, 10, 11, 12]), upload);
+	// Crossing the boundary uploads exactly ten bytes; the rest waits for the next part.
+	assert.deepEqual(uploaded, [new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])]);
+	await buffer.push(new Uint8Array([13, 14, 15]), upload);
+	await buffer.push(new Uint8Array([16, 17, 18, 19, 20, 21, 22, 23, 24, 25]), upload);
+	assert.deepEqual(
+		uploaded.map((part) => [...part]),
+		[
+			[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+			[11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+		],
+		"every non-trailing part is exactly partBytes long",
+	);
+	assert.deepEqual([...buffer.flush()], [21, 22, 23, 24, 25], "the remainder is the trailing part");
 
-	const tail = new BackupPartBuffer(10);
-	await tail.push(new Uint8Array([1, 2]), (part) => uploaded.push(part));
-	assert.deepEqual([...tail.flush()], [1, 2], "the remainder flushes at the end");
+	const exact = new BackupPartBuffer(10);
+	const exactUploaded = [];
+	await exact.push(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), (part) => exactUploaded.push(new Uint8Array(part)));
+	assert.deepEqual(exactUploaded.map((part) => [...part]), [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]], "an exact boundary uploads immediately");
+	assert.deepEqual([...exact.flush()], [], "and leaves nothing to flush");
 });
