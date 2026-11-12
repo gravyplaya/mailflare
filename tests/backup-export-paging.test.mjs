@@ -24,7 +24,7 @@ await build({
 	alias: { "@": join(root, "src") },
 	banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
 });
-const { exportDatabaseRecords } = await import(pathToFileURL(outfile).href);
+const { exportDatabaseRecords, streamDatabaseRecords } = await import(pathToFileURL(outfile).href);
 const { migrations } = JSON.parse(readFileSync(join(root, "src/lib/migrations/bundle.json"), "utf8"));
 
 const MESSAGE_COUNT = 250;
@@ -115,4 +115,31 @@ test("exporting a table too big for one D1 response pages through it by rowid", 
 	for (const row of [...document.tables.messages, ...document.tables.users]) {
 		assert.equal("__export_rowid" in row, false, "the rowid alias leaked into the backup");
 	}
+});
+
+test("the streamed document is byte-identical to the collected export", async () => {
+	const sqlite = database();
+	sqlite.prepare(
+		`INSERT INTO users (
+			id, email, password_hash, name, role, is_primary_admin, disabled, can_manage_mailboxes,
+			can_manage_domains, can_manage_users, keyboard_shortcuts_enabled, spam_protection_enabled,
+			show_full_recipient_addresses, remote_content_mode, require_second_factor, totp_enabled, created_at
+		) VALUES ('u1', 'u1@example.test', 'x', 'User', 'user', 0, 0, 0, 0, 0, 1, 1, 0, 'allow', 0, 0, 1)`,
+	).run();
+	const insert = sqlite.prepare(
+		"INSERT INTO messages (id, user_id, direction, from_addr, to_addr, status, html_body, created_at) VALUES (?, 'u1', 'inbound', 'a@example.test', 'b@example.test', 'received', ?, 1)",
+	);
+	for (let index = 1; index <= 30; index++) insert.run(`m${index}`, `<p>body ${index} — ünïcode ✓</p>`);
+
+	const collected = Buffer.from(await exportDatabaseRecords(d1(sqlite))).toString("utf8");
+	const chunks = [];
+	await streamDatabaseRecords(d1(sqlite), [], async (chunk) => chunks.push(chunk));
+	const streamed = Buffer.concat(chunks).toString("utf8");
+
+	// The only difference between two runs is the createdAt timestamp.
+	const stamp = collected.match(/"createdAt":"[^"]*"/)[0];
+	assert.equal(streamed.replace(/"createdAt":"[^"]*"/, stamp), collected);
+	assert.match(streamed, /^\{"format":"mailflare-database-backup","version":2,"createdAt":"/);
+	assert.match(streamed, /\}\}$/);
+	assert.ok(chunks.length > 30, `the stream should emit many chunks, saw ${chunks.length}`);
 });
